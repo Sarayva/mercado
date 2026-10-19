@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Meu Mercado - Compras & Preços</title>
+
+  <!-- PWA Meta Tags & Cores de Tema -->
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mercado">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="description" content="App PWA para controle de compras no supermercado com total ao vivo e histórico de preços.">
+
+  <!-- Favicon e Manifest -->
+  <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="manifest" href="./manifest.json">
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="./css/main.css">
+  <link rel="stylesheet" href="./css/components.css">
+  <link rel="stylesheet" href="./css/mobile.css">
+</head>
+<body>
+  <div id="app">
+    <!-- HEADER FIXO NO TOPO (TOTAL AO VIVO & PROGRESSO) -->
+    <header class="sticky-header">
+      <div class="header-top-bar">
+        <button id="header-list-select-btn" class="list-selector-btn" title="Trocar ou criar lista">
+          <span>📋</span>
+          <span id="header-list-name">Carregando lista...</span>
+          <span style="font-size: 0.75rem; opacity: 0.7;">▼</span>
+        </button>
+
+        <div class="header-actions">
+          <!-- Ícone do app / status PWA -->
+          <button class="icon-btn" title="Meu Mercado" style="pointer-events: none;">
+            🛒
+          </button>
+        </div>
+      </div>
+
+      <!-- Dashboard de Totais (Sempre Calculado Automaticamente) -->
+      <div class="totals-dashboard">
+        <div class="total-live-box">
+          <span class="total-label">
+            <span class="live-indicator"></span> Total Carrinho
+          </span>
+          <div class="total-value" id="header-total-live">R$ 0,00</div>
+        </div>
+
+        <div class="total-secondary-box">
+          <div class="estimated-value" id="header-estimated-value">Est: R$ 0,00</div>
+          <span class="diff-badge neutral" id="header-diff-badge">Estimativa total</span>
+        </div>
+      </div>
+
+      <!-- Barra de Progresso de Itens Pegos vs Faltando -->
+      <div class="progress-container">
+        <div class="progress-info">
+          <span>Progresso da compra</span>
+          <span id="header-progress-text">0 de 0 itens (0%)</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="header-progress-fill"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <main class="main-content">
+      <!-- Alternador de Modos (Comprando no Corredor vs Planejando Lista) -->
+      <div class="mode-toggle-bar">
+        <button id="tab-mode-comprando" class="mode-tab active">
+          🛒 Comprando
+        </button>
+        <button id="tab-mode-planejando" class="mode-tab">
+          📝 Planejar Lista
+        </button>
+      </div>
+
+      <!-- Lista de Itens (Gerenciada dinamicamente via JS) -->
+      <div id="list-content-container"></div>
+    </main>
+
+    <!-- BARRA INFERIOR FIXA (ZONA DO POLEGAR / THUMB ZONE) -->
+    <nav class="bottom-bar">
+      <div class="bottom-bar-inner">
+        <button id="btn-add-item-bottom" class="btn-primary-action">
+          <span style="font-size: 1.3rem; line-height: 1;">+</span>
+          <span>Adicionar Item</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- CONTAINER DE NOTIFICAÇÕES (TOAST COM "DESFAZER") -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- CONTAINER PARA MODAIS E BOTTOM SHEETS -->
+    <div id="modal-container"></div>
+  </div>
+
+  <!-- SCRIPT PRINCIPAL VIA ES MODULES -->
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

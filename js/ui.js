@@ -1,0 +1,853 @@
+/* ==========================================================================
+   Camada de Interface do Usuário (UI) - Meu Mercado PWA
+   Renderização, Modais deslizantes, Toasts e Toque com uma mão
+   ========================================================================== */
+
+import {
+  state,
+  calculateTotals,
+  setMode,
+  addItem,
+  updateItem,
+  markItemAsTaken,
+  returnItemToPending,
+  removeItem,
+  clearCart,
+  performUndo,
+  setCurrentList
+} from './state.js';
+
+import { getAllLists, saveList, setConfig } from './db.js';
+
+// Utilitário para formatar moeda Real (BRL)
+export function formatCurrency(value) {
+  const num = Number(value) || 0;
+  return num.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+// Utilitário para escapar HTML contra XSS
+function escapeHTML(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// Feedback háptico (vibração no celular se suportado)
+function triggerHaptic() {
+  if ('vibrate' in navigator) {
+    try {
+      navigator.vibrate(25);
+    } catch (e) {
+      // Ignora silenciosamente se o navegador bloquear
+    }
+  }
+}
+
+let toastTimeout = null;
+
+/**
+ * Exibe um Toast Snackbar com botão "DESFAZER"
+ */
+export function showToast(message, canUndo = true) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  if (toastTimeout) {
+    clearTimeout(toastTimeout);
+  }
+
+  container.innerHTML = `
+    <div class="toast">
+      <span class="toast-message">${escapeHTML(message)}</span>
+      ${canUndo ? `<button id="btn-undo" class="toast-undo-btn">DESFAZER</button>` : ''}
+    </div>
+  `;
+
+  if (canUndo) {
+    const btnUndo = document.getElementById('btn-undo');
+    if (btnUndo) {
+      btnUndo.addEventListener('click', async () => {
+        triggerHaptic();
+        const desc = await performUndo();
+        container.innerHTML = '';
+        if (desc) {
+          showToast(`Ação desfeita!`, false);
+        }
+      });
+    }
+  }
+
+  toastTimeout = setTimeout(() => {
+    container.innerHTML = '';
+  }, 5500);
+}
+
+/**
+ * Renderiza o Header Fixo com os totais ao vivo e progresso
+ */
+export function renderHeader() {
+  const totals = calculateTotals();
+  const listNameEl = document.getElementById('header-list-name');
+  const totalValueEl = document.getElementById('header-total-live');
+  const estimatedValueEl = document.getElementById('header-estimated-value');
+  const diffBadgeEl = document.getElementById('header-diff-badge');
+  const progressTextEl = document.getElementById('header-progress-text');
+  const progressFillEl = document.getElementById('header-progress-fill');
+
+  if (listNameEl) {
+    listNameEl.textContent = state.currentList ? state.currentList.nome : 'Sem Lista';
+  }
+
+  if (totalValueEl) {
+    totalValueEl.textContent = formatCurrency(totals.totalCarrinho);
+  }
+
+  if (estimatedValueEl) {
+    estimatedValueEl.textContent = `Est: ${formatCurrency(totals.totalEstimado)}`;
+  }
+
+  if (diffBadgeEl) {
+    if (totals.itensPegos === 0) {
+      diffBadgeEl.textContent = 'Estimativa total';
+      diffBadgeEl.className = 'diff-badge neutral';
+    } else if (totals.diferenca < 0) {
+      diffBadgeEl.textContent = `Economia ${formatCurrency(Math.abs(totals.diferenca))}`;
+      diffBadgeEl.className = 'diff-badge saving';
+    } else if (totals.diferenca > 0) {
+      diffBadgeEl.textContent = `+${formatCurrency(totals.diferenca)}`;
+      diffBadgeEl.className = 'diff-badge exceeded';
+    } else {
+      diffBadgeEl.textContent = 'Dentro do esperado';
+      diffBadgeEl.className = 'diff-badge neutral';
+    }
+  }
+
+  if (progressTextEl) {
+    progressTextEl.textContent = `${totals.itensPegos} de ${totals.itensTotal} itens (${totals.porcentagem}%)`;
+  }
+
+  if (progressFillEl) {
+    progressFillEl.style.width = `${totals.porcentagem}%`;
+  }
+}
+
+/**
+ * Renderiza o Seletor de Modo (Abas Comprando vs Editar Lista)
+ */
+export function renderModeSwitcher() {
+  const tabComprando = document.getElementById('tab-mode-comprando');
+  const tabPlanejando = document.getElementById('tab-mode-planejando');
+
+  if (tabComprando && tabPlanejando) {
+    if (state.mode === 'comprando') {
+      tabComprando.classList.add('active');
+      tabPlanejando.classList.remove('active');
+    } else {
+      tabComprando.classList.remove('active');
+      tabPlanejando.classList.add('active');
+    }
+  }
+}
+
+/**
+ * Renderiza o corpo da lista de acordo com o modo atual
+ */
+export function renderListContent() {
+  const container = document.getElementById('list-content-container');
+  if (!container) return;
+
+  if (!state.currentList || !state.currentList.itens || state.currentList.itens.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🛒</div>
+        <h3>Sua lista está vazia!</h3>
+        <p>Adicione itens que você planeja comprar no mercado.</p>
+        <button id="btn-empty-add-item" class="btn-primary-action" style="margin-top: 16px;">
+          + Adicionar Primeiro Item
+        </button>
+      </div>
+    `;
+    const btnAdd = document.getElementById('btn-empty-add-item');
+    if (btnAdd) {
+      btnAdd.addEventListener('click', () => openAddItemModal());
+    }
+    return;
+  }
+
+  if (state.mode === 'comprando') {
+    renderShoppingMode(container);
+  } else {
+    renderPlanningMode(container);
+  }
+}
+
+/**
+ * Modo "Comprando": tela focada no corredor do mercado
+ */
+function renderShoppingMode(container) {
+  const itens = state.currentList.itens;
+  const pendentes = itens.filter(i => !i.pego);
+  const noCarrinho = itens.filter(i => i.pego);
+
+  let html = '';
+
+  // Seção de Itens Pendentes (A Pegar)
+  html += `
+    <div class="section-header">
+      <span class="section-title">
+        <span>📋 A Pegar</span>
+      </span>
+      <span class="section-count">${pendentes.length}</span>
+    </div>
+    <div class="items-group">
+  `;
+
+  if (pendentes.length === 0) {
+    html += `
+      <div class="empty-state" style="padding: 24px 16px;">
+        <span style="font-size: 2rem;">🎉</span>
+        <p class="fw-semibold text-success">Tudo pego! Nenhum item pendente.</p>
+      </div>
+    `;
+  } else {
+    pendentes.forEach(item => {
+      const qtdText = item.qtdPlanejada > 1 ? `${item.qtdPlanejada}x` : '1 un';
+      const precoEstText = item.precoEstimado > 0 ? ` • Est: ${formatCurrency(item.precoEstimado)}` : '';
+      
+      html += `
+        <div class="item-card tap-highlight" data-item-id="${item.id}" data-action="pick">
+          <div class="item-checkbox" data-checkbox="true">✓</div>
+          <div class="item-details">
+            <div class="item-name-row">
+              <span class="item-name">${escapeHTML(item.nome)}</span>
+              ${item.categoria && item.categoria !== 'Geral' ? `<span class="item-category-tag">${escapeHTML(item.categoria)}</span>` : ''}
+            </div>
+            <span class="item-subtitle">Qtd: ${qtdText}${precoEstText}</span>
+          </div>
+          <div class="item-price-info">
+            <span class="text-primary fw-bold" style="font-size: 0.9rem;">Pegar ➔</span>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  html += `</div>`;
+
+  // Seção de Itens Já no Carrinho
+  if (noCarrinho.length > 0) {
+    html += `
+      <div class="section-header" style="margin-top: 28px;">
+        <span class="section-title">
+          <span>✅ No Carrinho</span>
+        </span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="section-count">${noCarrinho.length}</span>
+          <button id="btn-clear-cart" class="btn-secondary-action" style="padding: 4px 10px; font-size: 0.78rem; min-height: 28px; border-radius: 6px;">
+            Limpar Carrinho
+          </button>
+        </div>
+      </div>
+      <div class="items-group">
+    `;
+
+    noCarrinho.forEach(item => {
+      const subtotal = (Number(item.qtdReal) || 1) * (Number(item.precoReal) || 0);
+      const detalhesPreco = `${item.qtdReal} x ${formatCurrency(item.precoReal)}`;
+
+      html += `
+        <div class="item-card taken tap-highlight" data-item-id="${item.id}" data-action="edit-cart">
+          <div class="item-checkbox" data-checkbox="true">✓</div>
+          <div class="item-details">
+            <div class="item-name-row">
+              <span class="item-name">${escapeHTML(item.nome)}</span>
+            </div>
+            <span class="item-subtitle">${detalhesPreco}</span>
+          </div>
+          <div class="item-price-info">
+            <span class="item-real-total">${formatCurrency(subtotal)}</span>
+            <span class="item-unit-price">${formatCurrency(item.precoReal)}/un</span>
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+
+  // Ouvintes de clique nos cards do modo Comprando
+  container.querySelectorAll('.item-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      const itemId = card.dataset.itemId;
+      const action = card.dataset.action;
+      const isCheckbox = e.target.closest('[data-checkbox="true"]');
+
+      triggerHaptic();
+
+      if (action === 'pick') {
+        // Abre o modal rápido para informar preço real e quantidade
+        openCartSheet(itemId);
+      } else if (action === 'edit-cart') {
+        if (isCheckbox) {
+          // Se tocou direto no checkbox marcado, devolve pra lista pendente
+          returnItemToPending(itemId);
+          showToast(`Item devolvido para a lista.`);
+        } else {
+          // Se tocou no corpo do card, abre para ajustar valor ou quantidade
+          openCartSheet(itemId, true);
+        }
+      }
+    });
+  });
+
+  const btnClear = document.getElementById('btn-clear-cart');
+  if (btnClear) {
+    btnClear.addEventListener('click', () => {
+      triggerHaptic();
+      if (confirm('Deseja desmarcar todos os itens e limpar o carrinho?')) {
+        clearCart();
+        showToast('Carrinho limpo.');
+      }
+    });
+  }
+}
+
+/**
+ * Modo "Planejando": Organização e edição de itens antes de ir ao mercado
+ */
+function renderPlanningMode(container) {
+  const itens = state.currentList.itens;
+
+  let html = `
+    <div class="section-header">
+      <span class="section-title">
+        <span>📝 Itens Planejados</span>
+      </span>
+      <span class="section-count">${itens.length}</span>
+    </div>
+    <div class="items-group">
+  `;
+
+  itens.forEach(item => {
+    const qtdText = `${item.qtdPlanejada || 1} un`;
+    const estTotal = (item.qtdPlanejada || 1) * (item.precoEstimado || 0);
+    const precoText = item.precoEstimado > 0 
+      ? `Est: ${formatCurrency(item.precoEstimado)} (Total: ${formatCurrency(estTotal)})`
+      : 'Sem preço estimado';
+
+    html += `
+      <div class="item-card" data-item-id="${item.id}">
+        <div class="item-details">
+          <div class="item-name-row">
+            <span class="item-name">${escapeHTML(item.nome)}</span>
+            <span class="item-category-tag">${escapeHTML(item.categoria || 'Geral')}</span>
+          </div>
+          <span class="item-subtitle">Qtd: ${qtdText} • ${precoText}</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="icon-btn btn-edit-item" data-id="${item.id}" title="Editar">✏️</button>
+          <button class="icon-btn btn-delete-item" data-id="${item.id}" style="color: var(--danger);" title="Excluir">🗑️</button>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  container.innerHTML = html;
+
+  // Ouvintes de edição e remoção
+  container.querySelectorAll('.btn-edit-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerHaptic();
+      openEditItemModal(btn.dataset.id);
+    });
+  });
+
+  container.querySelectorAll('.btn-delete-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerHaptic();
+      removeItem(btn.dataset.id);
+      showToast('Item removido da lista.');
+    });
+  });
+}
+
+/* ==========================================================================
+   MODAIS & BOTTOM SHEETS
+   ========================================================================== */
+
+const modalContainer = document.getElementById('modal-container');
+
+/**
+ * Fecha qualquer modal aberto
+ */
+export function closeModal() {
+  if (modalContainer) {
+    modalContainer.innerHTML = '';
+  }
+}
+
+/**
+ * Bottom Sheet: Modo Comprando - Pegar item e informar preço/qtd real
+ */
+export function openCartSheet(itemId, isEditing = false) {
+  const item = state.currentList.itens.find(i => i.id === itemId);
+  if (!item) return;
+
+  // Preenche a quantidade com a real se já estiver no carrinho, ou com a planejada
+  let initialQtd = isEditing ? (item.qtdReal || item.qtdPlanejada || 1) : (item.qtdPlanejada || 1);
+  // Preço real se já tiver, ou preço estimado como sugestão inicial
+  let initialPrice = isEditing ? (item.precoReal || '') : (item.precoEstimado ? item.precoEstimado.toFixed(2) : '');
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet" id="cart-bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3 class="sheet-title">${escapeHTML(item.nome)}</h3>
+            <span class="item-subtitle">${isEditing ? 'Ajustar no carrinho' : 'Colocar no carrinho'}</span>
+          </div>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <!-- Preço Unitário Real -->
+        <div class="form-group">
+          <label class="form-label">Preço Real Unitário</label>
+          <div class="big-price-input-wrapper">
+            <span class="currency-prefix">R$</span>
+            <input 
+              type="number" 
+              step="0.01" 
+              inputmode="decimal" 
+              id="sheet-preco-real" 
+              class="form-input big-price-input" 
+              placeholder="0,00"
+              value="${initialPrice}"
+              autofocus
+            />
+          </div>
+          ${item.precoEstimado > 0 ? `<span class="item-subtitle" style="display:block; margin-top:4px;">Estimado na lista: ${formatCurrency(item.precoEstimado)}</span>` : ''}
+        </div>
+
+        <!-- Stepper de Quantidade -->
+        <div class="form-group">
+          <label class="form-label">Quantidade Levada</label>
+          <div class="quantity-stepper">
+            <button type="button" class="stepper-btn" id="btn-qtd-minus">−</button>
+            <input type="number" step="any" min="0.1" id="sheet-qtd-real" class="stepper-input" value="${initialQtd}">
+            <button type="button" class="stepper-btn" id="btn-qtd-plus">+</button>
+          </div>
+        </div>
+
+        <!-- Subtotal ao vivo do Item -->
+        <div class="item-live-subtotal">
+          <span class="subtotal-calc" id="sheet-subtotal-calc">1 x R$ 0,00</span>
+          <span class="subtotal-amount" id="sheet-subtotal-val">R$ 0,00</span>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          ${isEditing ? `
+            <button type="button" id="btn-return-pending" class="btn-secondary-action" style="color: var(--danger); border-color: var(--danger);">
+              Tirar do Carrinho
+            </button>
+          ` : ''}
+          <button type="button" id="btn-confirm-cart" class="btn-primary-action">
+            ✓ ${isEditing ? 'Atualizar Item' : 'Confirmar no Carrinho'}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const inputPreco = document.getElementById('sheet-preco-real');
+  const inputQtd = document.getElementById('sheet-qtd-real');
+  const subtotalCalc = document.getElementById('sheet-subtotal-calc');
+  const subtotalVal = document.getElementById('sheet-subtotal-val');
+  const btnMinus = document.getElementById('btn-qtd-minus');
+  const btnPlus = document.getElementById('btn-qtd-plus');
+  const btnConfirm = document.getElementById('btn-confirm-cart');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const overlay = document.getElementById('sheet-overlay');
+  const btnReturn = document.getElementById('btn-return-pending');
+
+  function updateSheetSubtotal() {
+    const p = parseFloat(inputPreco.value) || 0;
+    const q = parseFloat(inputQtd.value) || 0;
+    const tot = p * q;
+    subtotalCalc.textContent = `${q} x ${formatCurrency(p)}`;
+    subtotalVal.textContent = formatCurrency(tot);
+  }
+
+  updateSheetSubtotal();
+
+  inputPreco.addEventListener('input', updateSheetSubtotal);
+  inputQtd.addEventListener('input', updateSheetSubtotal);
+
+  btnMinus.addEventListener('click', () => {
+    triggerHaptic();
+    let current = parseFloat(inputQtd.value) || 1;
+    if (current > 1) {
+      inputQtd.value = current - 1;
+    } else if (current > 0.1) {
+      inputQtd.value = (current - 0.1).toFixed(1);
+    }
+    updateSheetSubtotal();
+  });
+
+  btnPlus.addEventListener('click', () => {
+    triggerHaptic();
+    let current = parseFloat(inputQtd.value) || 0;
+    inputQtd.value = current + 1;
+    updateSheetSubtotal();
+  });
+
+  btnConfirm.addEventListener('click', async () => {
+    triggerHaptic();
+    const preco = parseFloat(inputPreco.value) || 0;
+    const qtd = parseFloat(inputQtd.value) || 1;
+
+    await markItemAsTaken(itemId, qtd, preco);
+    closeModal();
+    showToast(`"${item.nome}" colocado no carrinho!`);
+  });
+
+  if (btnReturn) {
+    btnReturn.addEventListener('click', async () => {
+      triggerHaptic();
+      await returnItemToPending(itemId);
+      closeModal();
+      showToast(`"${item.nome}" devolvido para a lista.`);
+    });
+  }
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
+
+/**
+ * Modal: Adicionar Novo Item à Lista
+ */
+export function openAddItemModal() {
+  const categories = ['Geral', 'Mercearia', 'Hortifruti', 'Carnes', 'Laticínios', 'Bebidas', 'Limpeza', 'Higiene', 'Padaria'];
+  let selectedCategory = 'Geral';
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title">Novo Item</h3>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <form id="form-add-item">
+          <div class="form-group">
+            <label class="form-label">Nome do Produto *</label>
+            <input type="text" id="input-item-name" class="form-input" placeholder="Ex: Café em Pó 500g" required autofocus />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <div class="chips-container" id="category-chips">
+              ${categories.map(cat => `
+                <button type="button" class="chip ${cat === selectedCategory ? 'active' : ''}" data-cat="${cat}">${cat}</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Quantidade</label>
+              <div class="quantity-stepper">
+                <button type="button" class="stepper-btn" id="btn-add-minus">−</button>
+                <input type="number" step="any" min="0.1" id="input-item-qtd" class="stepper-input" value="1">
+                <button type="button" class="stepper-btn" id="btn-add-plus">+</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Preço Estimado</label>
+              <div class="big-price-input-wrapper">
+                <span class="currency-prefix" style="font-size: 1rem; left: 10px;">R$</span>
+                <input type="number" step="0.01" inputmode="decimal" id="input-item-price-est" class="form-input" style="padding-left: 38px;" placeholder="0,00" />
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-primary-action" style="width: 100%; margin-top: 14px;">
+            + Adicionar à Lista
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+
+  const form = document.getElementById('form-add-item');
+  const inputName = document.getElementById('input-item-name');
+  const inputQtd = document.getElementById('input-item-qtd');
+  const inputPrice = document.getElementById('input-item-price-est');
+  const chips = document.querySelectorAll('#category-chips .chip');
+  const btnMinus = document.getElementById('btn-add-minus');
+  const btnPlus = document.getElementById('btn-add-plus');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const overlay = document.getElementById('sheet-overlay');
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      selectedCategory = chip.dataset.cat;
+    });
+  });
+
+  btnMinus.addEventListener('click', () => {
+    triggerHaptic();
+    let val = parseFloat(inputQtd.value) || 1;
+    if (val > 1) inputQtd.value = val - 1;
+  });
+
+  btnPlus.addEventListener('click', () => {
+    triggerHaptic();
+    let val = parseFloat(inputQtd.value) || 0;
+    inputQtd.value = val + 1;
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    triggerHaptic();
+    const nome = inputName.value.trim();
+    if (!nome) return;
+
+    const qtd = parseFloat(inputQtd.value) || 1;
+    const preco = parseFloat(inputPrice.value) || 0;
+
+    await addItem({
+      nome,
+      categoria: selectedCategory,
+      qtdPlanejada: qtd,
+      precoEstimado: preco
+    });
+
+    closeModal();
+    showToast(`"${nome}" adicionado!`);
+  });
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
+
+/**
+ * Modal: Editar Item Planejado
+ */
+export function openEditItemModal(itemId) {
+  const item = state.currentList.itens.find(i => i.id === itemId);
+  if (!item) return;
+
+  const categories = ['Geral', 'Mercearia', 'Hortifruti', 'Carnes', 'Laticínios', 'Bebidas', 'Limpeza', 'Higiene', 'Padaria'];
+  let selectedCategory = item.categoria || 'Geral';
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title">Editar Item</h3>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <form id="form-edit-item">
+          <div class="form-group">
+            <label class="form-label">Nome do Produto</label>
+            <input type="text" id="input-edit-name" class="form-input" value="${escapeHTML(item.nome)}" required />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <div class="chips-container" id="category-chips">
+              ${categories.map(cat => `
+                <button type="button" class="chip ${cat === selectedCategory ? 'active' : ''}" data-cat="${cat}">${cat}</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Quantidade Planejada</label>
+              <input type="number" step="any" min="0.1" id="input-edit-qtd" class="form-input" value="${item.qtdPlanejada || 1}" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Preço Estimado</label>
+              <div class="big-price-input-wrapper">
+                <span class="currency-prefix" style="font-size: 1rem; left: 10px;">R$</span>
+                <input type="number" step="0.01" inputmode="decimal" id="input-edit-price" class="form-input" style="padding-left: 38px;" value="${item.precoEstimado || ''}" />
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 14px;">
+            <button type="button" id="btn-delete-current-item" class="btn-secondary-action" style="color: var(--danger); border-color: var(--danger);">
+              🗑️ Excluir
+            </button>
+            <button type="submit" class="btn-primary-action" style="flex: 1;">
+              Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  const form = document.getElementById('form-edit-item');
+  const inputName = document.getElementById('input-edit-name');
+  const inputQtd = document.getElementById('input-edit-qtd');
+  const inputPrice = document.getElementById('input-edit-price');
+  const chips = document.querySelectorAll('#category-chips .chip');
+  const btnDelete = document.getElementById('btn-delete-current-item');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const overlay = document.getElementById('sheet-overlay');
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      selectedCategory = chip.dataset.cat;
+    });
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    triggerHaptic();
+    await updateItem(itemId, {
+      nome: inputName.value.trim(),
+      categoria: selectedCategory,
+      qtdPlanejada: parseFloat(inputQtd.value) || 1,
+      precoEstimado: parseFloat(inputPrice.value) || 0
+    });
+    closeModal();
+    showToast(`Item "${inputName.value}" atualizado!`);
+  });
+
+  btnDelete.addEventListener('click', async () => {
+    triggerHaptic();
+    await removeItem(itemId);
+    closeModal();
+    showToast(`Item removido da lista.`);
+  });
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
+
+/**
+ * Modal: Gerenciador de Listas de Compras
+ */
+export async function openListManagerModal() {
+  const lists = await getAllLists();
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title">Minhas Listas</h3>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <div class="items-group" style="margin-bottom: 20px;">
+          ${lists.map(list => `
+            <div class="item-card tap-highlight ${state.currentList && state.currentList.id === list.id ? 'taken' : ''}" data-list-id="${list.id}" style="cursor: pointer;">
+              <div class="item-details">
+                <span class="item-name">${escapeHTML(list.nome)}</span>
+                <span class="item-subtitle">${list.itens.length} itens cadastrados</span>
+              </div>
+              ${state.currentList && state.currentList.id === list.id ? '<span class="text-success fw-bold">Ativa</span>' : ''}
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 16px;">
+          <h4 style="font-size: 1rem; margin-bottom: 10px; color: var(--text-secondary);">Criar Nova Lista</h4>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="input-new-list-name" class="form-input" placeholder="Ex: Churrasco de Domingo" />
+            <button id="btn-create-list" class="btn-primary-action" style="white-space: nowrap; padding: 0 18px;">
+              Criar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const overlay = document.getElementById('sheet-overlay');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const btnCreate = document.getElementById('btn-create-list');
+  const inputNewName = document.getElementById('input-new-list-name');
+
+  modalContainer.querySelectorAll('.item-card[data-list-id]').forEach(card => {
+    card.addEventListener('click', async () => {
+      triggerHaptic();
+      const listId = card.dataset.listId;
+      const selected = lists.find(l => l.id === listId);
+      if (selected) {
+        setCurrentList(selected);
+        await setConfig('activeListId', selected.id);
+        closeModal();
+        showToast(`Lista alterada para "${selected.nome}"`);
+      }
+    });
+  });
+
+  btnCreate.addEventListener('click', async () => {
+    const nome = inputNewName.value.trim();
+    if (!nome) return;
+    triggerHaptic();
+
+    const newList = {
+      id: 'lista_' + Date.now(),
+      nome,
+      dataCriacao: new Date().toISOString(),
+      itens: []
+    };
+
+    await saveList(newList);
+    setCurrentList(newList);
+    await setConfig('activeListId', newList.id);
+    closeModal();
+    showToast(`Nova lista "${nome}" criada!`);
+  });
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
+
+/**
+ * Renderização completa da UI
+ */
+export function renderUI() {
+  renderHeader();
+  renderModeSwitcher();
+  renderListContent();
+}

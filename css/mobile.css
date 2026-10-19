@@ -1,0 +1,76 @@
+/* ==========================================================================
+   CSS Mobile & Acessibilidade para Uma Mão - Meu Mercado PWA
+   Otimizado para corredores de supermercado (alvos de toque grandes, thumb zone)
+   ========================================================================== */
+
+/* Garantir tamanho mínimo para alvos de toque (mínimo recomendado: 48px x 48px) */
+button, 
+.item-checkbox, 
+.stepper-btn, 
+.mode-tab, 
+.chip,
+.icon-btn {
+  min-height: 44px;
+}
+
+/* Prevenção de zoom automático chato no iOS ao focar inputs */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Otimização da "Thumb Zone" (região de alcance fácil do polegar) */
+.thumb-action-zone {
+  position: sticky;
+  bottom: calc(var(--safe-bottom) + 12px);
+  z-index: 80;
+  margin-top: 16px;
+}
+
+/* Animações e transições táteis */
+.tap-highlight {
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+.tap-highlight:active {
+  transform: scale(0.97);
+  filter: brightness(0.9);
+}
+
+/* Scroll suave e barra de rolagem estilizada */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-light);
+}
+
+/* Ajustes para telas muito pequenas (<360px de largura) */
+@media (max-width: 360px) {
+  .total-value {
+    font-size: 1.5rem;
+  }
+  .totals-dashboard {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .total-secondary-box {
+    align-items: flex-start;
+    text-align: left;
+  }
+}

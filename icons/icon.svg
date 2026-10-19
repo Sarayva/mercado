@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#042f2e"/>
+    </linearGradient>
+    <linearGradient id="cartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  
+  <!-- Outer glowing accent ring -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4"/>
+
+  <!-- Shopping Cart Icon -->
+  <g filter="url(#shadow)" transform="translate(16, 8)">
+    <!-- Cart basket -->
+    <path d="M120 140 H380 L346 290 H154 Z" fill="none" stroke="#f8fafc" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Grid inside basket -->
+    <line x1="180" y1="180" x2="180" y2="250" stroke="#94a3b8" stroke-width="12" stroke-linecap="round"/>
+    <line x1="250" y1="180" x2="250" y2="250" stroke="#94a3b8" stroke-width="12" stroke-linecap="round"/>
+    <line x1="320" y1="180" x2="320" y2="250" stroke="#94a3b8" stroke-width="12" stroke-linecap="round"/>
+    <line x1="140" y1="215" x2="360" y2="215" stroke="#94a3b8" stroke-width="12" stroke-linecap="round"/>
+
+    <!-- Cart handle -->
+    <path d="M80 140 H120 L154 290 H346 L376 350 H130" fill="none" stroke="#f8fafc" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Wheels -->
+    <circle cx="170" cy="390" r="24" fill="#22c55e"/>
+    <circle cx="330" cy="390" r="24" fill="#22c55e"/>
+    <circle cx="170" cy="390" r="10" fill="#042f2e"/>
+    <circle cx="330" cy="390" r="10" fill="#042f2e"/>
+  </g>
+
+  <!-- Live Total Badge (Calculator / Money symbol) -->
+  <g transform="translate(290, 70)" filter="url(#shadow)">
+    <circle cx="70" cy="70" r="62" fill="#22c55e" stroke="#f8fafc" stroke-width="8"/>
+    <!-- Checkmark or R$ symbol -->
+    <text x="70" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="44" font-weight="900" fill="#042f2e" text-anchor="middle">R$</text>
+  </g>
+</svg>

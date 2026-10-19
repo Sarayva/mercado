@@ -473,3 +473,285 @@ export function renderPriceTrendSVG(historicoAsc, width = 340, height = 155) {
     </div>
   `;
 }
+
+/**
+ * Compara o preço atual com o valor pago há aproximadamente 1 mês (~20 a 45 dias atrás)
+ * Informa se o produto subiu, caiu ou se manteve estável (inflação pessoal)
+ */
+export async function getMonthlyComparison(productName, currentPrice) {
+  const price = Number(currentPrice) || 0;
+  if (!productName || price <= 0) return null;
+
+  const records = await getPricesForProduct(productName);
+  if (!records || records.length === 0) return null;
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  // Procura compras feitas há ~30 dias (janela ideal de 18 a 50 dias atrás)
+  const candidates = records
+    .map((r) => {
+      const recordTime = new Date(r.data).getTime();
+      const daysAgo = (now - recordTime) / dayMs;
+      return {
+        record: r,
+        daysAgo: Math.round(daysAgo),
+        distanceTo30: Math.abs(daysAgo - 30)
+      };
+    })
+    .filter((c) => c.daysAgo >= 14 && c.record.valor > 0);
+
+  if (candidates.length === 0) {
+    if (records.length > 1) {
+      const oldest = records[0];
+      const daysAgo = Math.max(1, Math.round((now - new Date(oldest.data).getTime()) / dayMs));
+      const precoAnt = Number(oldest.valor) || 0;
+      const diff = price - precoAnt;
+      const pct = precoAnt > 0 ? (diff / precoAnt) * 100 : 0;
+      return {
+        encontrado: true,
+        precoAnterior: precoAnt,
+        dataAnterior: oldest.data,
+        mercadoAnterior: oldest.mercado || 'Mercado Geral',
+        diasAtras: daysAgo,
+        diferenca: Math.round(diff * 100) / 100,
+        percentual: Number(pct.toFixed(1)),
+        status: diff > 0.05 ? 'mais_caro' : (diff < -0.05 ? 'mais_barato' : 'estavel'),
+        rotuloPeriodo: `${daysAgo}d atrás`
+      };
+    }
+    return null;
+  }
+
+  // Ordena pelo mais próximo de 30 dias
+  candidates.sort((a, b) => a.distanceTo30 - b.distanceTo30);
+  const best = candidates[0];
+  const precoAnt = Number(best.record.valor) || 0;
+  const diff = price - precoAnt;
+  const pct = precoAnt > 0 ? (diff / precoAnt) * 100 : 0;
+
+  return {
+    encontrado: true,
+    precoAnterior: precoAnt,
+    dataAnterior: best.record.data,
+    mercadoAnterior: best.record.mercado || 'Mercado Geral',
+    diasAtras: best.daysAgo,
+    diferenca: Math.round(diff * 100) / 100,
+    percentual: Number(pct.toFixed(1)),
+    status: diff > 0.05 ? 'mais_caro' : (diff < -0.05 ? 'mais_barato' : 'estavel'),
+    rotuloPeriodo: best.daysAgo >= 22 && best.daysAgo <= 38 ? 'mês passado' : `há ${best.daysAgo} dias`
+  };
+}
+
+/**
+ * Analisa a melhor época para comprar um determinado produto
+ * - 1ª Quinzena (dias 1-15) vs 2ª Quinzena (dias 16-31)
+ * - Melhor dia da semana com menor média de preço
+ */
+export async function getBestBuyingPeriod(productName) {
+  const records = await getPricesForProduct(productName);
+  if (!records || records.length < 2) {
+    return {
+      temDados: false,
+      mensagem: 'Histórico com poucas compras. Conforme você cadastrar mais compras, a melhor quinzena será calculada.'
+    };
+  }
+
+  let soma1a = 0, count1a = 0;
+  let soma2a = 0, count2a = 0;
+
+  const diasSemanaMap = {
+    0: { nome: 'Domingo', soma: 0, count: 0 },
+    1: { nome: 'Segunda-feira', soma: 0, count: 0 },
+    2: { nome: 'Terça-feira', soma: 0, count: 0 },
+    3: { nome: 'Quarta-feira', soma: 0, count: 0 },
+    4: { nome: 'Quinta-feira', soma: 0, count: 0 },
+    5: { nome: 'Sexta-feira', soma: 0, count: 0 },
+    6: { nome: 'Sábado', soma: 0, count: 0 }
+  };
+
+  records.forEach(r => {
+    const val = Number(r.valor) || 0;
+    if (val <= 0) return;
+
+    const date = new Date(r.data);
+    const diaDoMes = date.getDate();
+    const diaDaSemana = date.getDay();
+
+    if (diaDoMes <= 15) {
+      soma1a += val;
+      count1a++;
+    } else {
+      soma2a += val;
+      count2a++;
+    }
+
+    if (diasSemanaMap[diaDaSemana]) {
+      diasSemanaMap[diaDaSemana].soma += val;
+      diasSemanaMap[diaDaSemana].count++;
+    }
+  });
+
+  const media1a = count1a > 0 ? soma1a / count1a : null;
+  const media2a = count2a > 0 ? soma2a / count2a : null;
+
+  let melhorQuinzena = null;
+  let economiaPct = 0;
+  let diferencaMedia = 0;
+
+  if (media1a !== null && media2a !== null) {
+    if (Math.abs(media1a - media2a) < 0.1) {
+      melhorQuinzena = 'Ambas as quinzenas com preços similares';
+    } else if (media1a < media2a) {
+      melhorQuinzena = '1ª Quinzena (dias 1 a 15)';
+      diferencaMedia = media2a - media1a;
+      economiaPct = (diferencaMedia / media2a) * 100;
+    } else {
+      melhorQuinzena = '2ª Quinzena (dias 16 a 31)';
+      diferencaMedia = media1a - media2a;
+      economiaPct = (diferencaMedia / media1a) * 100;
+    }
+  } else if (media1a !== null) {
+    melhorQuinzena = '1ª Quinzena (registros atuais)';
+  } else {
+    melhorQuinzena = '2ª Quinzena (registros atuais)';
+  }
+
+  // Melhor dia da semana
+  let melhorDia = null;
+  let menorMediaDia = Infinity;
+  Object.values(diasSemanaMap).forEach(d => {
+    if (d.count > 0) {
+      const m = d.soma / d.count;
+      if (m < menorMediaDia) {
+        menorMediaDia = m;
+        melhorDia = d.nome;
+      }
+    }
+  });
+
+  return {
+    temDados: true,
+    totalCompras: records.length,
+    melhorQuinzena,
+    media1a: media1a !== null ? Number(media1a.toFixed(2)) : null,
+    count1a,
+    media2a: media2a !== null ? Number(media2a.toFixed(2)) : null,
+    count2a,
+    economiaPct: Number(economiaPct.toFixed(1)),
+    diferencaMedia: Number(diferencaMedia.toFixed(2)),
+    melhorDiaSemana: melhorDia,
+    menorMediaDia: menorMediaDia !== Infinity ? Number(menorMediaDia.toFixed(2)) : null
+  };
+}
+
+/**
+ * Previsão de Reabastecimento Inteligente baseada no histórico de consumo:
+ * Calcula o intervalo médio (em dias) entre compras de cada produto e compara
+ * com a data da última compra. Se estiver no prazo ou atrasado, sugere para a próxima lista!
+ */
+export async function getReplenishmentSuggestions() {
+  const allPrices = await getAllPrecos();
+  if (!allPrices || allPrices.length === 0) return [];
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  // Agrupa por produto normalizado
+  const map = {};
+  allPrices.forEach(p => {
+    const norm = normalizeProductName(p.nomeItem);
+    if (!norm) return;
+    if (!map[norm]) {
+      map[norm] = {
+        nome: p.nomeItem,
+        categoria: p.categoria || 'Geral',
+        compras: []
+      };
+    }
+    map[norm].compras.push(p);
+  });
+
+  const suggestions = [];
+
+  for (const norm in map) {
+    const item = map[norm];
+    // Ordena cronologicamente
+    item.compras.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+    const count = item.compras.length;
+    const ultimaCompra = item.compras[count - 1];
+    const diasDesdeUltima = Math.max(0, Math.round((now - new Date(ultimaCompra.data).getTime()) / dayMs));
+
+    let intervaloMedioDias = 30; // default 1 mês
+    let confiancaPrevisao = 'estimada';
+
+    if (count >= 2) {
+      let somaIntervalos = 0;
+      let totalIntervalos = 0;
+      for (let i = 1; i < count; i++) {
+        const prev = new Date(item.compras[i - 1].data).getTime();
+        const curr = new Date(item.compras[i].data).getTime();
+        const diffDays = (curr - prev) / dayMs;
+        if (diffDays > 0) {
+          somaIntervalos += diffDays;
+          totalIntervalos++;
+        }
+      }
+      if (totalIntervalos > 0) {
+        intervaloMedioDias = Math.max(3, Math.round(somaIntervalos / totalIntervalos));
+        confiancaPrevisao = 'alta';
+      }
+    }
+
+    // Média de quantidade comprada
+    const somaQtd = item.compras.reduce((acc, c) => acc + (Number(c.quantidade) || 1), 0);
+    const qtdSugerida = Math.max(1, Math.round(somaQtd / count));
+    const precoEst = Number(ultimaCompra.valor) || 0;
+
+    // Condição de sugestão:
+    // Se o tempo decorrido atingiu >= 70% do ciclo de consumo, ou se é item básico e passou >= 18 dias
+    const pctCiclo = (diasDesdeUltima / intervaloMedioDias) * 100;
+
+    if (pctCiclo >= 70 || diasDesdeUltima >= 20) {
+      let urgencia = 'baixa';
+      let motivo = '';
+
+      if (diasDesdeUltima >= intervaloMedioDias) {
+        const atraso = diasDesdeUltima - intervaloMedioDias;
+        urgencia = 'alta';
+        motivo = atraso === 0 
+          ? `No prazo do ciclo de consumo (${intervaloMedioDias} dias)` 
+          : `Provavelmente já acabou (${atraso}d além do ciclo de ${intervaloMedioDias}d)`;
+      } else {
+        urgencia = 'media';
+        const faltam = intervaloMedioDias - diasDesdeUltima;
+        motivo = `Quase acabando (restam aprox. ${faltam} dias do ciclo de ${intervaloMedioDias}d)`;
+      }
+
+      suggestions.push({
+        nome: item.nome,
+        norm,
+        categoria: item.categoria,
+        qtdSugerida,
+        precoEstimado: precoEst,
+        subtotalEstimado: qtdSugerida * precoEst,
+        diasDesdeUltima,
+        intervaloMedioDias,
+        pctCiclo: Math.round(pctCiclo),
+        urgencia, // 'alta' | 'media' | 'baixa'
+        motivo,
+        confiancaPrevisao,
+        essencial: count >= 2 || ['Arroz', 'Feijão', 'Leite', 'Café', 'Óleo', 'Detergente'].some(s => item.nome.toLowerCase().includes(s.toLowerCase()))
+      });
+    }
+  }
+
+  // Ordena por urgência (alta primeiro) e depois por maior percentual de ciclo
+  const urgenciaPeso = { alta: 3, media: 2, baixa: 1 };
+  return suggestions.sort((a, b) => {
+    const diffUrg = urgenciaPeso[b.urgencia] - urgenciaPeso[a.urgencia];
+    if (diffUrg !== 0) return diffUrg;
+    return b.pctCiclo - a.pctCiclo;
+  });
+}
+

@@ -405,6 +405,261 @@ input, textarea {
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Linha 2.5: Barra de Teto de Gastos (Orçamento) e Essenciais */
+.header-budget-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 4px 2px 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  margin-top: 2px;
+}
+
+.budget-pill-interactive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.budget-pill-interactive:active {
+  transform: scale(0.97);
+  background: var(--bg-card-hover);
+}
+
+.budget-icon {
+  font-size: 0.82rem;
+}
+
+.budget-meta strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.budget-balance-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+}
+
+.budget-balance-pill.budget-ok {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.budget-balance-pill.budget-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.budget-balance-pill.budget-danger {
+  background: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  animation: pulseBudgetDanger 1.6s infinite;
+}
+
+@keyframes pulseBudgetDanger {
+  0% { transform: scale(1); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+  50% { transform: scale(1.02); box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+  100% { transform: scale(1); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.essentials-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.essentials-pill strong {
+  color: #fcd34d;
+  font-weight: 700;
+}
+
+.essentials-pill.warning-overflow {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.essentials-pill.warning-overflow strong {
+  color: #fca5a5;
+}
+
+.header-budget-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0%;
+  background: #3b82f6;
+  opacity: 0.7;
+  transition: width 0.3s ease, background 0.3s ease;
+  pointer-events: none;
+}
+.header-budget-fill.fill-ok { background: #10b981; }
+.header-budget-fill.fill-warning { background: #f59e0b; }
+.header-budget-fill.fill-danger { background: #ef4444; }
+
+/* Botão Estrela de Essencial nos Cards */
+.item-star-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.05rem;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  color: var(--text-muted);
+  opacity: 0.35;
+  transition: all 0.15s ease;
+  border-radius: 4px;
+}
+.item-star-btn:hover,
+.item-star-btn:active {
+  transform: scale(1.15);
+  opacity: 0.8;
+}
+.item-star-btn.active {
+  color: #fbbf24;
+  opacity: 1;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+}
+
+.item-card.is-essential {
+  border-left: 3px solid #f59e0b;
+}
+
+.section-essential-header {
+  border-left: 3px solid #f59e0b;
+  padding-left: 8px;
+}
+
+/* Badge de Comparativo Mensal */
+.price-monthly-banner {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.74rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  line-height: 1.35;
+}
+.price-monthly-banner.saving {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.price-monthly-banner.exceeded {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.price-monthly-banner.neutral {
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.monthly-chip {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 2px;
+}
+.monthly-chip.saving {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+.monthly-chip.exceeded {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+/* Modal de Reabastecimento */
+.replenish-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  transition: background 0.15s ease;
+}
+.replenish-card-item:hover {
+  background: var(--bg-card-hover);
+}
+.replenish-urgency-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.replenish-urgency-tag.alta {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+}
+.replenish-urgency-tag.media {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+}
+.replenish-urgency-tag.baixa {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+/* Card Melhor Época para Comprar */
+.best-period-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.quinzena-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.quinzena-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  text-align: center;
+}
+.quinzena-box.is-winner {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.08);
+}
+
 /* --- LISTAS DE ITENS --- */
 .section-header {
   display: flex;

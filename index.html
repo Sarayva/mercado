@@ -72,6 +72,16 @@
                 <span id="sync-status-text">offline</span>
               </button>
             </div>
+        <!-- Linha 2.5: Barra de Teto de Gastos / Orçamento e Saldo Restante -->
+        <div class="header-budget-row" id="header-budget-row">
+          <div class="budget-pill-interactive" id="header-budget-trigger" title="Toque para definir ou alterar o teto de gastos">
+            <span class="budget-icon">🎯</span>
+            <span class="budget-meta" id="header-budget-meta">Teto: <strong>Definir</strong></span>
+            <span class="budget-balance-pill" id="header-budget-balance"></span>
+          </div>
+          <div class="essentials-pill" id="header-essentials-pill" title="Total dos itens essenciais">
+            <span class="essentials-star">⭐</span>
+            <span id="header-essentials-text">Essenciais: <strong>R$ 0,00</strong></span>
           </div>
         </div>
       </div>
@@ -79,6 +89,7 @@
       <!-- Linha 3: Barra de Progresso Fina na borda inferior do Header -->
       <div class="header-progress-track">
         <div class="header-progress-fill" id="header-progress-fill"></div>
+        <div class="header-budget-fill" id="header-budget-fill"></div>
       </div>
     </header>
 

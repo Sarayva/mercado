@@ -15,7 +15,9 @@ import {
   clearCart,
   performUndo,
   setCurrentList,
-  addPriceEntryAndCartItem
+  addPriceEntryAndCartItem,
+  setListBudget,
+  toggleItemEssential
 } from './state.js';
 
 import { getAllLists, saveList, setConfig } from './db.js';
@@ -28,7 +30,10 @@ import {
   getAllTrackedProducts,
   getKnownSupermarkets,
   renderPriceTrendSVG,
-  removePriceRecord
+  removePriceRecord,
+  getMonthlyComparison,
+  getBestBuyingPeriod,
+  getReplenishmentSuggestions
 } from './prices.js';
 
 // Utilitário para formatar moeda Real (BRL)
@@ -104,7 +109,7 @@ export function showToast(message, canUndo = true) {
 }
 
 /**
- * Renderiza o Header Slim Fixo com os totais ao vivo e progresso
+ * Renderiza o Header Slim Fixo com os totais ao vivo, teto de gastos e essenciais
  */
 export function renderHeader() {
   const totals = calculateTotals();
@@ -114,6 +119,12 @@ export function renderHeader() {
   const diffBadgeEl = document.getElementById('header-diff-badge');
   const progressTextEl = document.getElementById('header-progress-text');
   const progressFillEl = document.getElementById('header-progress-fill');
+  const budgetFillEl = document.getElementById('header-budget-fill');
+  const budgetMetaEl = document.getElementById('header-budget-meta');
+  const budgetBalanceEl = document.getElementById('header-budget-balance');
+  const essentialsTextEl = document.getElementById('header-essentials-text');
+  const essentialsPillEl = document.getElementById('header-essentials-pill');
+  const budgetTriggerEl = document.getElementById('header-budget-trigger');
 
   if (listNameEl) {
     listNameEl.textContent = state.currentList ? state.currentList.nome : 'Minha Lista';
@@ -150,6 +161,169 @@ export function renderHeader() {
   if (progressFillEl) {
     progressFillEl.style.width = `${totals.porcentagem}%`;
   }
+
+  // Teto de Gastos (Orçamento) e Saldo Restante
+  if (budgetMetaEl) {
+    if (totals.orcamento > 0) {
+      budgetMetaEl.innerHTML = `Teto: <strong>${formatCurrency(totals.orcamento)}</strong>`;
+    } else {
+      budgetMetaEl.innerHTML = `Teto: <strong>+ Definir</strong>`;
+    }
+  }
+
+  if (budgetBalanceEl) {
+    if (totals.orcamento > 0) {
+      budgetBalanceEl.style.display = 'inline-flex';
+      if (totals.saldoRestante < 0) {
+        budgetBalanceEl.className = 'budget-balance-pill budget-danger';
+        budgetBalanceEl.textContent = `🚨 Estourou em ${formatCurrency(Math.abs(totals.saldoRestante))}!`;
+      } else if (totals.percentualOrcamento >= 85) {
+        budgetBalanceEl.className = 'budget-balance-pill budget-warning';
+        budgetBalanceEl.textContent = `⚠️ Restam ${formatCurrency(totals.saldoRestante)} (${totals.percentualOrcamento}%)`;
+      } else {
+        budgetBalanceEl.className = 'budget-balance-pill budget-ok';
+        budgetBalanceEl.textContent = `Restam ${formatCurrency(totals.saldoRestante)}`;
+      }
+    } else {
+      budgetBalanceEl.style.display = 'none';
+      budgetBalanceEl.textContent = '';
+    }
+  }
+
+  if (budgetFillEl) {
+    if (totals.orcamento > 0) {
+      const pct = Math.min(100, totals.percentualOrcamento);
+      budgetFillEl.style.width = `${pct}%`;
+      budgetFillEl.className = 'header-budget-fill ' + (
+        totals.percentualOrcamento > 100 ? 'fill-danger' :
+        (totals.percentualOrcamento >= 85 ? 'fill-warning' : 'fill-ok')
+      );
+    } else {
+      budgetFillEl.style.width = '0%';
+    }
+  }
+
+  // Itens Essenciais
+  if (essentialsTextEl) {
+    const valEssenciais = formatCurrency(totals.totalEssenciais);
+    if (totals.itensEssenciaisTotal > 0) {
+      essentialsTextEl.innerHTML = `Essenciais: <strong>${valEssenciais}</strong> (${totals.itensEssenciaisPegos}/${totals.itensEssenciaisTotal})`;
+      if (totals.orcamento > 0 && totals.totalEssenciais > totals.orcamento) {
+        if (essentialsPillEl) essentialsPillEl.classList.add('warning-overflow');
+      } else {
+        if (essentialsPillEl) essentialsPillEl.classList.remove('warning-overflow');
+      }
+    } else {
+      essentialsTextEl.innerHTML = `Essenciais: <strong>${valEssenciais}</strong>`;
+      if (essentialsPillEl) essentialsPillEl.classList.remove('warning-overflow');
+    }
+  }
+
+  // Ouvinte de clique no teto de gastos
+  if (budgetTriggerEl && !budgetTriggerEl._hasListener) {
+    budgetTriggerEl._hasListener = true;
+    budgetTriggerEl.addEventListener('click', () => {
+      triggerHaptic();
+      openBudgetModal();
+    });
+  }
+}
+
+/**
+ * Modal: Definir ou Editar o Teto de Gastos (Orçamento) da Lista
+ */
+export function openBudgetModal() {
+  const currentBudget = state.currentList?.orcamento || 0;
+  const totals = calculateTotals();
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3 class="sheet-title">🎯 Teto de Gastos</h3>
+            <span class="item-subtitle" style="font-size: 0.8rem;">Defina quanto você pode gastar nesta compra</span>
+          </div>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <div style="background: rgba(13, 148, 136, 0.08); border: 1px solid rgba(20, 184, 166, 0.25); border-radius: var(--radius-md); padding: 12px; margin-bottom: 14px;">
+          <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 4px;">Situação Atual:</div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.88rem; font-weight: 700;">
+            <span>Gasto no Carrinho: <span style="color: var(--success);">${formatCurrency(totals.totalCarrinho)}</span></span>
+            ${totals.itensEssenciaisTotal > 0 ? `<span style="color: #fbbf24;">⭐ Essenciais: ${formatCurrency(totals.totalEssenciais)}</span>` : ''}
+          </div>
+        </div>
+
+        <form id="form-set-budget">
+          <div class="form-group">
+            <label class="form-label">Limite Máximo de Dinheiro (R$)</label>
+            <div class="big-price-input-wrapper">
+              <span class="currency-prefix">R$</span>
+              <input 
+                type="number" 
+                step="0.01" 
+                inputmode="decimal" 
+                id="input-budget-value" 
+                class="form-input big-price-input" 
+                placeholder="600,00"
+                value="${currentBudget > 0 ? currentBudget.toFixed(2) : ''}"
+                autofocus
+              />
+            </div>
+          </div>
+
+          <!-- Sugestões Rápidas de Valores -->
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;">
+            <button type="button" class="chip btn-quick-budget" data-val="300">R$ 300</button>
+            <button type="button" class="chip btn-quick-budget" data-val="500">R$ 500</button>
+            <button type="button" class="chip btn-quick-budget" data-val="600">R$ 600</button>
+            <button type="button" class="chip btn-quick-budget" data-val="800">R$ 800</button>
+            <button type="button" class="chip btn-quick-budget" data-val="1000">R$ 1.000</button>
+            <button type="button" class="chip btn-quick-budget" data-val="0" style="color: var(--text-muted);">Sem limite</button>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button type="submit" class="sheet-btn-primary" style="flex: 1;">
+              ✓ Salvar Teto de Gastos
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  const inputBudget = document.getElementById('input-budget-value');
+  const form = document.getElementById('form-set-budget');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const overlay = document.getElementById('sheet-overlay');
+
+  modalContainer.querySelectorAll('.btn-quick-budget').forEach(btn => {
+    btn.addEventListener('click', () => {
+      triggerHaptic();
+      const val = parseFloat(btn.dataset.val) || 0;
+      inputBudget.value = val > 0 ? val.toFixed(2) : '';
+    });
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    triggerHaptic();
+    const val = parseFloat(inputBudget.value) || 0;
+    await setListBudget(val);
+    closeModal();
+    if (val > 0) {
+      showToast(`Teto de gastos definido em ${formatCurrency(val)}!`);
+    } else {
+      showToast(`Teto de gastos removido.`);
+    }
+  });
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
 }
 
 /**
@@ -203,60 +377,88 @@ export function renderListContent() {
 }
 
 /**
- * Modo "Comprando": tela focada no corredor do mercado
+ * Modo "Comprando": tela focada no corredor do mercado com separação de Essenciais
  */
 function renderShoppingMode(container) {
   const itens = state.currentList.itens;
   const pendentes = itens.filter(i => !i.pego);
   const noCarrinho = itens.filter(i => i.pego);
 
+  const pendentesEssenciais = pendentes.filter(i => Boolean(i.essencial));
+  const pendentesNormais = pendentes.filter(i => !i.essencial);
+
   let html = '';
 
-  // Seção de Itens Pendentes (A Pegar)
-  html += `
-    <div class="section-header">
-      <span class="section-title">
-        <span>📋 A Pegar</span>
-      </span>
-      <span class="section-badge">${pendentes.length}</span>
-    </div>
-    <div class="items-group">
-  `;
+  const renderItemCard = (item) => {
+    const qtdText = item.qtdPlanejada > 1 ? `${item.qtdPlanejada}x` : '1 un';
+    const precoEstText = item.precoEstimado > 0 ? ` • Est: ${formatCurrency(item.precoEstimado)}` : '';
+    const isEss = Boolean(item.essencial);
 
+    return `
+      <div class="item-card tap-highlight ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}" data-action="pick">
+        <div class="item-checkbox-wrapper" data-checkbox="true">
+          <div class="item-checkbox">✓</div>
+        </div>
+        <div class="item-details">
+          <div class="item-name-row">
+            <span class="item-name">${escapeHTML(item.nome)}</span>
+            ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24; border-color: rgba(245, 158, 11, 0.35);">⭐ Essencial</span>' : ''}
+            ${item.categoria && item.categoria !== 'Geral' ? `<span class="item-category-tag">${escapeHTML(item.categoria)}</span>` : ''}
+          </div>
+          <span class="item-subtitle">${qtdText}${precoEstText}</span>
+        </div>
+        <div class="item-price-info" style="display: flex; align-items: center; gap: 4px;">
+          <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
+          <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
+          <span class="item-pick-hint">Pegar ➔</span>
+        </div>
+      </div>
+    `;
+  };
+
+  // Seção de Itens Pendentes (A Pegar)
   if (pendentes.length === 0) {
     html += `
+      <div class="section-header">
+        <span class="section-title"><span>📋 A Pegar</span></span>
+        <span class="section-badge">0</span>
+      </div>
       <div class="empty-state" style="padding: 20px 14px;">
         <span style="font-size: 1.8rem;">🎉</span>
         <p class="fw-semibold text-success" style="font-size: 0.92rem;">Tudo pego! Nenhum item pendente.</p>
       </div>
     `;
   } else {
-    pendentes.forEach(item => {
-      const qtdText = item.qtdPlanejada > 1 ? `${item.qtdPlanejada}x` : '1 un';
-      const precoEstText = item.precoEstimado > 0 ? ` • Est: ${formatCurrency(item.precoEstimado)}` : '';
-      
+    // 1. Se houver itens essenciais pendentes, destaca-os primeiro no topo!
+    if (pendentesEssenciais.length > 0) {
       html += `
-        <div class="item-card tap-highlight" data-item-id="${item.id}" data-action="pick">
-          <div class="item-checkbox-wrapper" data-checkbox="true">
-            <div class="item-checkbox">✓</div>
-          </div>
-          <div class="item-details">
-            <div class="item-name-row">
-              <span class="item-name">${escapeHTML(item.nome)}</span>
-              ${item.categoria && item.categoria !== 'Geral' ? `<span class="item-category-tag">${escapeHTML(item.categoria)}</span>` : ''}
-            </div>
-            <span class="item-subtitle">${qtdText}${precoEstText}</span>
-          </div>
-          <div class="item-price-info" style="display: flex; align-items: center; gap: 6px;">
-            <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
-            <span class="item-pick-hint">Pegar ➔</span>
-          </div>
+        <div class="section-header section-essential-header">
+          <span class="section-title" style="color: #fbbf24;">
+            <span>⭐ Prioridade / Essenciais</span>
+          </span>
+          <span class="section-badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">${pendentesEssenciais.length}</span>
+        </div>
+        <div class="items-group">
+          ${pendentesEssenciais.map(renderItemCard).join('')}
         </div>
       `;
-    });
-  }
+    }
 
-  html += `</div>`;
+    // 2. Itens normais pendentes
+    if (pendentesNormais.length > 0) {
+      html += `
+        <div class="section-header" style="${pendentesEssenciais.length > 0 ? 'margin-top: 18px;' : ''}">
+          <span class="section-title">
+            <span>📋 ${pendentesEssenciais.length > 0 ? 'Outros Itens' : 'A Pegar'}</span>
+          </span>
+          <span class="section-badge">${pendentesNormais.length}</span>
+        </div>
+        <div class="items-group">
+          ${pendentesNormais.map(renderItemCard).join('')}
+        </div>
+      `;
+    }
+  }
 
   // Seção de Itens Já no Carrinho
   if (noCarrinho.length > 0) {
@@ -278,19 +480,22 @@ function renderShoppingMode(container) {
     noCarrinho.forEach(item => {
       const subtotal = (Number(item.qtdReal) || 1) * (Number(item.precoReal) || 0);
       const detalhesPreco = `${item.qtdReal} x ${formatCurrency(item.precoReal)}`;
+      const isEss = Boolean(item.essencial);
 
       html += `
-        <div class="item-card taken tap-highlight" data-item-id="${item.id}" data-action="edit-cart">
+        <div class="item-card taken tap-highlight ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}" data-action="edit-cart">
           <div class="item-checkbox-wrapper" data-checkbox="true">
             <div class="item-checkbox">✓</div>
           </div>
           <div class="item-details">
             <div class="item-name-row">
               <span class="item-name">${escapeHTML(item.nome)}</span>
+              ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24;">⭐ Essencial</span>' : ''}
             </div>
             <span class="item-subtitle">${detalhesPreco} • ${escapeHTML(item.mercado || 'Mercado Geral')}</span>
           </div>
-          <div class="item-price-info" style="display: flex; align-items: center; gap: 6px;">
+          <div class="item-price-info" style="display: flex; align-items: center; gap: 4px;">
+            <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
             <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
             <div style="text-align: right;">
               <span class="item-real-total">${formatCurrency(subtotal)}</span>
@@ -309,7 +514,7 @@ function renderShoppingMode(container) {
   // Ouvintes de clique nos cards do modo Comprando
   container.querySelectorAll('.item-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      if (e.target.closest('.btn-history-direct')) return;
+      if (e.target.closest('.btn-history-direct') || e.target.closest('.item-star-btn')) return;
       const itemId = card.dataset.itemId;
       const action = card.dataset.action;
       const isCheckbox = e.target.closest('[data-checkbox="true"]');
@@ -326,6 +531,17 @@ function renderShoppingMode(container) {
           openCartSheet(itemId, true);
         }
       }
+    });
+  });
+
+  // Ouvintes de alternância rápida de Essencial ⭐
+  container.querySelectorAll('.item-star-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      triggerHaptic();
+      const itemId = btn.dataset.starId;
+      const isNowEss = await toggleItemEssential(itemId);
+      showToast(isNowEss ? 'Marcado como Essencial ⭐' : 'Item definido como Normal');
     });
   });
 
@@ -372,17 +588,20 @@ function renderPlanningMode(container) {
     const precoText = item.precoEstimado > 0 
       ? `Est: ${formatCurrency(item.precoEstimado)} (Tot: ${formatCurrency(estTotal)})`
       : 'Sem estimativa';
+    const isEss = Boolean(item.essencial);
 
     html += `
-      <div class="item-card" data-item-id="${item.id}">
+      <div class="item-card ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}">
         <div class="item-details">
           <div class="item-name-row">
             <span class="item-name">${escapeHTML(item.nome)}</span>
+            ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24;">⭐ Essencial</span>' : ''}
             <span class="item-category-tag">${escapeHTML(item.categoria || 'Geral')}</span>
           </div>
           <span class="item-subtitle">${qtdText} • ${precoText}</span>
         </div>
         <div style="display: flex; gap: 4px; align-items: center;">
+          <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
           <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Histórico de Preços">📊</button>
           <button class="action-icon-btn btn-edit-item" data-id="${item.id}" title="Editar">✏️</button>
           <button class="action-icon-btn btn-delete-item" data-id="${item.id}" style="color: var(--danger);" title="Excluir">🗑️</button>
@@ -393,6 +612,17 @@ function renderPlanningMode(container) {
 
   html += `</div>`;
   container.innerHTML = html;
+
+  // Ouvintes de alternância rápida de Essencial ⭐
+  container.querySelectorAll('.item-star-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      triggerHaptic();
+      const itemId = btn.dataset.starId;
+      const isNowEss = await toggleItemEssential(itemId);
+      showToast(isNowEss ? 'Marcado como Essencial ⭐' : 'Item definido como Normal');
+    });
+  });
 
   // Ouvintes de histórico direto
   container.querySelectorAll('.btn-history-direct').forEach(btn => {
@@ -496,6 +726,7 @@ export async function openCartSheet(itemId, isEditing = false) {
             />
           </div>
           ${item.precoEstimado > 0 ? `<span class="item-subtitle" style="display:block; margin-top:3px; font-size: 0.75rem;">Estimado na lista: ${formatCurrency(item.precoEstimado)}</span>` : ''}
+          <div id="cart-monthly-comp-container"></div>
           ${historyBannerHtml}
         </div>
 
@@ -526,6 +757,15 @@ export async function openCartSheet(itemId, isEditing = false) {
           </div>
         </div>
 
+        <!-- Toggle Essencial -->
+        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 12px;">
+          <div>
+            <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">⭐ Item Essencial / Prioritário</div>
+            <div style="font-size: 0.72rem; color: var(--text-muted);">Contabilizar na meta prioritária</div>
+          </div>
+          <input type="checkbox" id="sheet-item-essential" ${item.essencial ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;" />
+        </div>
+
         <!-- Subtotal ao vivo do Item -->
         <div class="item-live-subtotal">
           <span class="subtotal-calc" id="sheet-subtotal-calc">1 x R$ 0,00</span>
@@ -549,6 +789,8 @@ export async function openCartSheet(itemId, isEditing = false) {
   const inputPreco = document.getElementById('sheet-preco-real');
   const inputQtd = document.getElementById('sheet-qtd-real');
   const inputMercado = document.getElementById('sheet-item-mercado');
+  const inputEssential = document.getElementById('sheet-item-essential');
+  const monthlyCompEl = document.getElementById('cart-monthly-comp-container');
   const subtotalCalc = document.getElementById('sheet-subtotal-calc');
   const subtotalVal = document.getElementById('sheet-subtotal-val');
   const btnMinus = document.getElementById('btn-qtd-minus');
@@ -575,7 +817,39 @@ export async function openCartSheet(itemId, isEditing = false) {
 
   updateSheetSubtotal();
 
-  inputPreco.addEventListener('input', updateSheetSubtotal);
+  // Comparação com mês anterior em tempo real
+  let debounceMonthlyTimer = null;
+  async function checkMonthlyComp() {
+    const p = parseFloat(inputPreco.value) || 0;
+    if (p > 0) {
+      const comp = await getMonthlyComparison(item.nome, p);
+      if (comp && comp.encontrado && monthlyCompEl) {
+        let badgeClass = comp.status === 'mais_barato' ? 'saving' : (comp.status === 'mais_caro' ? 'exceeded' : 'neutral');
+        let icon = comp.status === 'mais_barato' ? '▼' : (comp.status === 'mais_caro' ? '▲' : '=');
+        let txt = '';
+        if (comp.status === 'mais_barato') {
+          txt = `${icon} <strong>${formatCurrency(Math.abs(comp.diferenca))} mais barato</strong> (-${Math.abs(comp.percentual)}%) vs ${comp.rotuloPeriodo} (${formatCurrency(comp.precoAnterior)} no ${escapeHTML(comp.mercadoAnterior)})`;
+        } else if (comp.status === 'mais_caro') {
+          txt = `${icon} <strong>${formatCurrency(comp.diferenca)} mais caro</strong> (+${comp.percentual}%) vs ${comp.rotuloPeriodo} (${formatCurrency(comp.precoAnterior)} no ${escapeHTML(comp.mercadoAnterior)})`;
+        } else {
+          txt = `${icon} Mesmo preço de ${comp.rotuloPeriodo} (${formatCurrency(comp.precoAnterior)} no ${escapeHTML(comp.mercadoAnterior)})`;
+        }
+        monthlyCompEl.innerHTML = `<div class="price-monthly-banner ${badgeClass}">${txt}</div>`;
+      } else if (monthlyCompEl) {
+        monthlyCompEl.innerHTML = '';
+      }
+    } else if (monthlyCompEl) {
+      monthlyCompEl.innerHTML = '';
+    }
+  }
+
+  checkMonthlyComp();
+
+  inputPreco.addEventListener('input', () => {
+    updateSheetSubtotal();
+    if (debounceMonthlyTimer) clearTimeout(debounceMonthlyTimer);
+    debounceMonthlyTimer = setTimeout(checkMonthlyComp, 250);
+  });
   inputQtd.addEventListener('input', updateSheetSubtotal);
 
   btnMinus.addEventListener('click', () => {
@@ -601,9 +875,11 @@ export async function openCartSheet(itemId, isEditing = false) {
     const preco = parseFloat(inputPreco.value) || 0;
     const qtd = parseFloat(inputQtd.value) || 1;
     const mercado = (inputMercado ? inputMercado.value.trim() : '') || 'Mercado Geral';
+    const isEss = Boolean(inputEssential?.checked);
 
     window.lastUsedSupermarket = mercado;
 
+    item.essencial = isEss;
     await markItemAsTaken(itemId, qtd, preco, mercado);
     closeModal();
     showToast(`"${item.nome}" colocado no carrinho!`);
@@ -691,6 +967,15 @@ export async function openAddItemModal() {
             </div>
           </div>
 
+          <!-- Toggle Essencial / Prioritário -->
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-top: 4px; margin-bottom: 10px;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">⭐ Item Essencial / Prioritário</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">Destacar no topo e contar no orçamento</div>
+            </div>
+            <input type="checkbox" id="input-item-essential" style="width: 18px; height: 18px; cursor: pointer;" />
+          </div>
+
           <button type="submit" class="sheet-btn-primary" style="width: 100%; margin-top: 10px;">
             + Adicionar à Lista
           </button>
@@ -703,6 +988,7 @@ export async function openAddItemModal() {
   const inputName = document.getElementById('input-item-name');
   const inputQtd = document.getElementById('input-item-qtd');
   const inputPrice = document.getElementById('input-item-price-est');
+  const inputEssential = document.getElementById('input-item-essential');
   const suggestionContainer = document.getElementById('add-item-price-suggestion-container');
   const chips = document.querySelectorAll('#category-chips .chip');
   const btnMinus = document.getElementById('btn-add-minus');
@@ -770,12 +1056,14 @@ export async function openAddItemModal() {
 
     const qtd = parseFloat(inputQtd.value) || 1;
     const preco = parseFloat(inputPrice.value) || 0;
+    const essencial = Boolean(inputEssential?.checked);
 
     await addItem({
       nome,
       categoria: selectedCategory,
       qtdPlanejada: qtd,
-      precoEstimado: preco
+      precoEstimado: preco,
+      essencial
     });
 
     closeModal();
@@ -849,6 +1137,15 @@ export async function openEditItemModal(itemId) {
             </div>
           </div>
 
+          <!-- Toggle Essencial / Prioritário -->
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-top: 4px; margin-bottom: 12px;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">⭐ Item Essencial / Prioritário</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">Destacar no topo e contar no orçamento</div>
+            </div>
+            <input type="checkbox" id="input-edit-essential" ${item.essencial ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;" />
+          </div>
+
           <div style="display: flex; gap: 8px; margin-top: 12px;">
             <button type="button" id="btn-delete-current-item" class="sheet-btn-secondary" style="color: var(--danger);">
               🗑️ Excluir
@@ -866,6 +1163,7 @@ export async function openEditItemModal(itemId) {
   const inputName = document.getElementById('input-edit-name');
   const inputQtd = document.getElementById('input-edit-qtd');
   const inputPrice = document.getElementById('input-edit-price');
+  const inputEssential = document.getElementById('input-edit-essential');
   const chips = document.querySelectorAll('#category-chips .chip');
   const btnDelete = document.getElementById('btn-delete-current-item');
   const btnClose = document.getElementById('btn-close-sheet');
@@ -898,11 +1196,13 @@ export async function openEditItemModal(itemId) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     triggerHaptic();
+    const essencial = Boolean(inputEssential?.checked);
     await updateItem(itemId, {
       nome: inputName.value.trim(),
       categoria: selectedCategory,
       qtdPlanejada: parseFloat(inputQtd.value) || 1,
-      precoEstimado: parseFloat(inputPrice.value) || 0
+      precoEstimado: parseFloat(inputPrice.value) || 0,
+      essencial
     });
     closeModal();
     showToast(`Item "${inputName.value}" atualizado!`);
@@ -938,25 +1238,42 @@ export async function openListManagerModal() {
           <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
         </div>
 
-        <div class="items-group" style="margin-bottom: 16px;">
+        <div class="items-group" style="margin-bottom: 12px;">
           ${lists.map(list => `
             <div class="item-card tap-highlight ${state.currentList && state.currentList.id === list.id ? 'taken' : ''}" data-list-id="${list.id}" style="cursor: pointer;">
               <div class="item-details">
                 <span class="item-name">${escapeHTML(list.nome)}</span>
-                <span class="item-subtitle">${list.itens.length} itens cadastrados</span>
+                <span class="item-subtitle">${list.itens.length} itens cadastrados ${list.orcamento > 0 ? `• Teto: ${formatCurrency(list.orcamento)}` : ''}</span>
               </div>
               ${state.currentList && state.currentList.id === list.id ? '<span class="text-success fw-bold" style="font-size: 0.85rem;">Ativa</span>' : ''}
             </div>
           `).join('')}
         </div>
 
+        <!-- Botão de Previsão de Reabastecimento Inteligente -->
+        <div style="margin-bottom: 16px;">
+          <button id="btn-open-replenish-modal" class="sheet-btn-primary" style="width: 100%; background: linear-gradient(135deg, #0d9488, #10b981); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 14px;">
+            <span style="font-size: 1.1rem;">✨</span>
+            <span style="font-weight: 700;">Prever Próxima Compra (Reabastecimento)</span>
+          </button>
+          <div style="font-size: 0.72rem; color: var(--text-muted); text-align: center; margin-top: 4px;">
+            Gera lista automática baseada no seu intervalo médio de consumo
+          </div>
+        </div>
+
         <div style="border-top: 1px solid var(--border); padding-top: 14px;">
           <h4 style="font-size: 0.92rem; margin-bottom: 8px; color: var(--text-secondary);">Criar Nova Lista</h4>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="input-new-list-name" class="form-input" placeholder="Ex: Churrasco de Domingo" />
-            <button id="btn-create-list" class="sheet-btn-primary" style="white-space: nowrap; padding: 0 16px;">
-              Criar
-            </button>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <input type="text" id="input-new-list-name" class="form-input" placeholder="Nome da Lista (Ex: Mensal do Mês)" />
+            <div style="display: flex; gap: 8px;">
+              <div class="big-price-input-wrapper" style="flex: 1;">
+                <span class="currency-prefix" style="font-size: 0.88rem; left: 10px;">R$</span>
+                <input type="number" step="0.01" inputmode="decimal" id="input-new-list-budget" class="form-input" style="padding-left: 36px; font-size: 0.9rem;" placeholder="Teto / Orçamento (opcional: 600,00)" />
+              </div>
+              <button id="btn-create-list" class="sheet-btn-primary" style="white-space: nowrap; padding: 0 18px;">
+                Criar Lista
+              </button>
+            </div>
           </div>
         </div>
 
@@ -989,9 +1306,17 @@ export async function openListManagerModal() {
   const btnClose = document.getElementById('btn-close-sheet');
   const btnCreate = document.getElementById('btn-create-list');
   const inputNewName = document.getElementById('input-new-list-name');
+  const inputNewBudget = document.getElementById('input-new-list-budget');
+  const btnOpenReplenish = document.getElementById('btn-open-replenish-modal');
   const btnSaveVision = document.getElementById('btn-save-vision-config');
   const inputVisionUrl = document.getElementById('input-vision-url');
   const checkDevSim = document.getElementById('check-dev-sim');
+
+  if (btnOpenReplenish) {
+    btnOpenReplenish.addEventListener('click', () => {
+      openReplenishmentModal();
+    });
+  }
 
   modalContainer.querySelectorAll('.item-card[data-list-id]').forEach(card => {
     card.addEventListener('click', async () => {
@@ -1011,10 +1336,12 @@ export async function openListManagerModal() {
     const nome = inputNewName.value.trim();
     if (!nome) return;
     triggerHaptic();
+    const budgetVal = parseFloat(inputNewBudget?.value) || 0;
 
     const newList = {
       id: 'lista_' + Date.now(),
       nome,
+      orcamento: budgetVal,
       dataCriacao: new Date().toISOString(),
       itens: []
     };
@@ -1037,6 +1364,215 @@ export async function openListManagerModal() {
     showToast(simEnabled ? 'Simulação ativada!' : 'Configurações de IA salvas!');
     closeModal();
   });
+}
+
+/**
+ * Modal: Previsão de Reabastecimento Inteligente (Geração de Futuras Listas)
+ */
+export async function openReplenishmentModal() {
+  triggerHaptic();
+  const suggestions = await getReplenishmentSuggestions();
+
+  if (!suggestions || suggestions.length === 0) {
+    modalContainer.innerHTML = `
+      <div class="modal-overlay" id="sheet-overlay">
+        <div class="bottom-sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <div>
+              <h3 class="sheet-title">✨ Previsão de Reabastecimento</h3>
+              <span class="item-subtitle" style="font-size: 0.8rem;">Baseada no seu ciclo de consumo</span>
+            </div>
+            <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+          </div>
+          <div class="empty-state" style="padding: 24px 14px;">
+            <span style="font-size: 2.2rem;">✨</span>
+            <h4 style="color: var(--text-primary); font-size: 1rem; margin-top: 6px;">Nenhum produto precisando de reposição</h4>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
+              Todos os seus produtos comprados recentemente ainda estão dentro do intervalo estimado de uso. Conforme os dias passarem, as previsões aparecerão aqui automaticamente.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+    const btnClose = document.getElementById('btn-close-sheet');
+    const overlay = document.getElementById('sheet-overlay');
+    btnClose.addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+    return;
+  }
+
+  // Calcula estimativa total dos itens sugeridos
+  const totalEstimadoSugerido = suggestions.reduce((acc, s) => acc + s.subtotalEstimado, 0);
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet" style="max-height: 92vh;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3 class="sheet-title">✨ Próxima Compra Recomendada</h3>
+            <span class="item-subtitle" style="font-size: 0.8rem;">${suggestions.length} itens com base na frequência de compra</span>
+          </div>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary);">Custo Estimado da Reposição:</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--success);" id="replenish-total-est">${formatCurrency(totalEstimadoSugerido)}</div>
+          </div>
+          <span style="font-size: 0.72rem; color: var(--text-muted);">
+            ${suggestions.filter(s => s.urgencia === 'alta').length} urgente(s)
+          </span>
+        </div>
+
+        <!-- Lista de Itens Sugeridos -->
+        <div style="max-height: 48vh; overflow-y: auto; margin-bottom: 14px; padding-right: 2px;">
+          ${suggestions.map((s, idx) => `
+            <div class="replenish-card-item" data-idx="${idx}">
+              <div style="display: flex; align-items: flex-start; gap: 10px; flex: 1;">
+                <input type="checkbox" class="replenish-check" data-idx="${idx}" checked style="width: 19px; height: 19px; margin-top: 3px; cursor: pointer;" />
+                <div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">${escapeHTML(s.nome)}</span>
+                    <span class="replenish-urgency-tag ${s.urgencia}">${s.urgencia}</span>
+                    ${s.essencial ? '<span style="font-size: 0.72rem; color: #fbbf24;" title="Item Essencial">⭐</span>' : ''}
+                  </div>
+                  <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">
+                    ${escapeHTML(s.motivo)}
+                  </div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
+                    Comprado há ${s.diasDesdeUltima} dias • Ciclo médio: ${s.intervaloMedioDias} dias
+                  </div>
+                </div>
+              </div>
+
+              <div style="text-align: right; white-space: nowrap;">
+                <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);">${formatCurrency(s.subtotalEstimado)}</div>
+                <div style="font-size: 0.72rem; color: var(--text-muted);">${s.qtdSugerida}x ${formatCurrency(s.precoEstimado)}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Ações: Criar Nova Lista ou Adicionar à Atual -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button id="btn-create-replenish-list" class="sheet-btn-primary" style="width: 100%; padding: 12px;">
+            ✓ Criar Nova Lista com Selecionados
+          </button>
+          ${state.currentList ? `
+            <button id="btn-add-to-current-list" class="sheet-btn-secondary" style="width: 100%; padding: 10px; font-size: 0.85rem;">
+              + Adicionar Selecionados à Lista Atual ("${escapeHTML(state.currentList.nome)}")
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const btnClose = document.getElementById('btn-close-sheet');
+  const overlay = document.getElementById('sheet-overlay');
+  const btnCreateNew = document.getElementById('btn-create-replenish-list');
+  const btnAddToCurrent = document.getElementById('btn-add-to-current-list');
+  const totalEstEl = document.getElementById('replenish-total-est');
+
+  const updateSelectedTotal = () => {
+    let tot = 0;
+    modalContainer.querySelectorAll('.replenish-check:checked').forEach(chk => {
+      const idx = parseInt(chk.dataset.idx, 10);
+      tot += suggestions[idx].subtotalEstimado;
+    });
+    if (totalEstEl) totalEstEl.textContent = formatCurrency(tot);
+  };
+
+  modalContainer.querySelectorAll('.replenish-check').forEach(chk => {
+    chk.addEventListener('change', updateSelectedTotal);
+  });
+
+  const getSelectedItems = () => {
+    const selected = [];
+    modalContainer.querySelectorAll('.replenish-check:checked').forEach(chk => {
+      const idx = parseInt(chk.dataset.idx, 10);
+      selected.push(suggestions[idx]);
+    });
+    return selected;
+  };
+
+  btnCreateNew.addEventListener('click', async () => {
+    const selected = getSelectedItems();
+    if (selected.length === 0) {
+      alert('Selecione ao menos um produto para criar a lista.');
+      return;
+    }
+    triggerHaptic();
+
+    const dataAtual = new Date();
+    const mesAno = dataAtual.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+    const nomeLista = `Reabastecimento (${mesAno})`;
+
+    const itensCriados = selected.map(s => ({
+      id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      nome: s.nome,
+      categoria: s.categoria || 'Geral',
+      qtdPlanejada: s.qtdSugerida || 1,
+      precoEstimado: s.precoEstimado || 0,
+      pego: false,
+      essencial: Boolean(s.essencial),
+      qtdReal: s.qtdSugerida || 1,
+      precoReal: 0,
+      dataPego: null
+    }));
+
+    const custoTot = selected.reduce((acc, s) => acc + s.subtotalEstimado, 0);
+    const orcamentoSugerido = Math.ceil(custoTot / 50) * 50;
+
+    const newList = {
+      id: 'lista_' + Date.now(),
+      nome: nomeLista,
+      orcamento: orcamentoSugerido,
+      dataCriacao: new Date().toISOString(),
+      itens: itensCriados
+    };
+
+    await saveList(newList);
+    setCurrentList(newList);
+    await setConfig('activeListId', newList.id);
+    closeModal();
+    showToast(`Lista "${nomeLista}" criada com ${selected.length} itens previstos!`);
+  });
+
+  if (btnAddToCurrent) {
+    btnAddToCurrent.addEventListener('click', async () => {
+      const selected = getSelectedItems();
+      if (selected.length === 0) {
+        alert('Selecione ao menos um produto.');
+        return;
+      }
+      triggerHaptic();
+
+      for (const s of selected) {
+        await addItem({
+          nome: s.nome,
+          categoria: s.categoria || 'Geral',
+          qtdPlanejada: s.qtdSugerida || 1,
+          precoEstimado: s.precoEstimado || 0,
+          essencial: Boolean(s.essencial)
+        });
+      }
+
+      closeModal();
+      showToast(`${selected.length} itens adicionados à lista atual!`);
+    });
+  }
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
 
   btnClose.addEventListener('click', closeModal);
   overlay.addEventListener('click', (e) => {
@@ -1154,6 +1690,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
                 required
               />
             </div>
+            <div id="confirm-monthly-comp-container"></div>
           </div>
 
           <!-- Quantidade levada -->
@@ -1164,6 +1701,15 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
               <input type="number" step="any" min="0.1" id="confirm-item-qtd" class="stepper-input" value="1">
               <button type="button" class="stepper-btn" id="btn-confirm-plus">+</button>
             </div>
+          </div>
+
+          <!-- Toggle Essencial -->
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-top: 4px; margin-bottom: 12px;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">⭐ Item Essencial / Prioritário</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">Contabilizar na meta prioritária</div>
+            </div>
+            <input type="checkbox" id="confirm-item-essential" style="width: 18px; height: 18px; cursor: pointer;" />
           </div>
 
           <!-- Peso / Volume e Preço por kg/L -->
@@ -1208,9 +1754,11 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
   const inputName = document.getElementById('confirm-item-name');
   const inputPrice = document.getElementById('confirm-item-price');
   const inputQtd = document.getElementById('confirm-item-qtd');
+  const inputEssential = document.getElementById('confirm-item-essential');
   const inputPeso = document.getElementById('confirm-item-peso');
   const inputRate = document.getElementById('confirm-item-rate');
   const inputMercado = document.getElementById('confirm-item-mercado');
+  const confirmMonthlyEl = document.getElementById('confirm-monthly-comp-container');
   const subtotalCalc = document.getElementById('confirm-subtotal-calc');
   const subtotalVal = document.getElementById('confirm-subtotal-val');
   const btnMinus = document.getElementById('btn-confirm-minus');
@@ -1227,7 +1775,46 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
     subtotalVal.textContent = formatCurrency(p * q);
   }
 
-  inputPrice.addEventListener('input', updateConfirmSubtotal);
+  // Comparação com mês anterior para etiquetas lidas
+  let confirmMonthlyTimer = null;
+  async function updateConfirmMonthly() {
+    const p = parseFloat(inputPrice.value) || 0;
+    const n = inputName.value.trim();
+    if (p > 0 && n) {
+      const comp = await getMonthlyComparison(n, p);
+      if (comp && comp.encontrado && confirmMonthlyEl) {
+        let badgeClass = comp.status === 'mais_barato' ? 'saving' : (comp.status === 'mais_caro' ? 'exceeded' : 'neutral');
+        let icon = comp.status === 'mais_barato' ? '▼' : (comp.status === 'mais_caro' ? '▲' : '=');
+        let txt = '';
+        if (comp.status === 'mais_barato') {
+          txt = `${icon} <strong>${formatCurrency(Math.abs(comp.diferenca))} mais barato</strong> (-${Math.abs(comp.percentual)}%) vs ${comp.rotuloPeriodo} (${formatCurrency(comp.precoAnterior)} no ${escapeHTML(comp.mercadoAnterior)})`;
+        } else if (comp.status === 'mais_caro') {
+          txt = `${icon} <strong>${formatCurrency(comp.diferenca)} mais caro</strong> (+${comp.percentual}%) vs ${comp.rotuloPeriodo} (${formatCurrency(comp.precoAnterior)} no ${escapeHTML(comp.mercadoAnterior)})`;
+        } else {
+          txt = `${icon} Mesmo preço de ${comp.rotuloPeriodo} (${formatCurrency(comp.precoAnterior)} no ${escapeHTML(comp.mercadoAnterior)})`;
+        }
+        confirmMonthlyEl.innerHTML = `<div class="price-monthly-banner ${badgeClass}">${txt}</div>`;
+      } else if (confirmMonthlyEl) {
+        confirmMonthlyEl.innerHTML = '';
+      }
+    } else if (confirmMonthlyEl) {
+      confirmMonthlyEl.innerHTML = '';
+    }
+  }
+
+  updateConfirmMonthly();
+
+  inputPrice.addEventListener('input', () => {
+    updateConfirmSubtotal();
+    if (confirmMonthlyTimer) clearTimeout(confirmMonthlyTimer);
+    confirmMonthlyTimer = setTimeout(updateConfirmMonthly, 250);
+  });
+
+  inputName.addEventListener('input', () => {
+    if (confirmMonthlyTimer) clearTimeout(confirmMonthlyTimer);
+    confirmMonthlyTimer = setTimeout(updateConfirmMonthly, 300);
+  });
+
   inputQtd.addEventListener('input', updateConfirmSubtotal);
 
   btnMinus.addEventListener('click', () => {
@@ -1262,6 +1849,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
     const peso = inputPeso.value.trim();
     const precoPorKgLitro = inputRate.value.trim();
     const mercado = inputMercado.value.trim();
+    const essencial = Boolean(inputEssential?.checked);
 
     // Grava entrada em precos e coloca direto no carrinho
     await addPriceEntryAndCartItem({
@@ -1271,6 +1859,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
       peso,
       precoPorKgLitro,
       mercado,
+      essencial,
       fotoUrl: photoDataUrl
     });
 
@@ -1598,6 +2187,47 @@ export async function openProductHistoryModal(productName) {
   // Gráfico SVG de evolução temporal
   const chartHtml = renderPriceTrendSVG(stats.historicoAsc);
 
+  // Análise da Melhor Época para Comprar (1ª vs 2ª quinzena e dia da semana)
+  const bestPeriod = await getBestBuyingPeriod(stats.nome);
+  let bestPeriodHtml = '';
+  if (bestPeriod && bestPeriod.temDados) {
+    bestPeriodHtml = `
+      <div class="best-period-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+          <h4 style="font-size: 0.88rem; color: #f8fafc; font-weight: 700;">🗓️ Melhor Época para Comprar</h4>
+          ${bestPeriod.economiaPct > 0 ? `<span class="market-badge-best" style="font-size: 0.68rem;">Economia de ~${bestPeriod.economiaPct}%</span>` : ''}
+        </div>
+        
+        <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; margin-bottom: 8px;">
+          ${bestPeriod.melhorQuinzena 
+            ? `📌 Melhor Época: <strong style="color: var(--success);">${escapeHTML(bestPeriod.melhorQuinzena)}</strong>`
+            : ''}
+          ${bestPeriod.melhorDiaSemana 
+            ? ` • Dia com menor preço médio: <strong style="color: #38bdf8;">${escapeHTML(bestPeriod.melhorDiaSemana)}</strong> (${formatCurrency(bestPeriod.menorMediaDia)})`
+            : ''}
+        </div>
+
+        <div class="quinzena-grid">
+          <div class="quinzena-box ${bestPeriod.media1a !== null && (bestPeriod.media2a === null || bestPeriod.media1a <= bestPeriod.media2a) ? 'is-winner' : ''}">
+            <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">1ª Quinzena (1-15)</div>
+            <div style="font-size: 0.92rem; font-weight: 700; color: var(--text-primary); margin-top: 2px;">
+              ${bestPeriod.media1a !== null ? formatCurrency(bestPeriod.media1a) : 'Sem dados'}
+            </div>
+            <div style="font-size: 0.68rem; color: var(--text-secondary);">${bestPeriod.count1a} compra(s)</div>
+          </div>
+
+          <div class="quinzena-box ${bestPeriod.media2a !== null && (bestPeriod.media1a === null || bestPeriod.media2a < bestPeriod.media1a) ? 'is-winner' : ''}">
+            <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">2ª Quinzena (16-31)</div>
+            <div style="font-size: 0.92rem; font-weight: 700; color: var(--text-primary); margin-top: 2px;">
+              ${bestPeriod.media2a !== null ? formatCurrency(bestPeriod.media2a) : 'Sem dados'}
+            </div>
+            <div style="font-size: 0.68rem; color: var(--text-secondary);">${bestPeriod.count2a} compra(s)</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   modalContainer.innerHTML = `
     <div class="modal-overlay" id="sheet-overlay">
       <div class="bottom-sheet" style="max-height: 92vh;">
@@ -1641,6 +2271,9 @@ export async function openProductHistoryModal(productName) {
         <div style="margin-bottom: 14px;">
           ${chartHtml}
         </div>
+
+        <!-- 2.5 Melhor Época para Comprar (Sazonalidade e Quinzenas) -->
+        ${bestPeriodHtml}
 
         <!-- 3. Comparativo entre Mercados -->
         <div style="margin-bottom: 16px;">

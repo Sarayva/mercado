@@ -68,28 +68,55 @@ export function calculateTotals() {
       itensPegos: 0,
       itensTotal: 0,
       porcentagem: 0,
-      diferenca: 0
+      diferenca: 0,
+      orcamento: 0,
+      saldoRestante: 0,
+      percentualOrcamento: 0,
+      totalEssenciais: 0,
+      itensEssenciaisTotal: 0,
+      itensEssenciaisPegos: 0
     };
   }
 
   const itens = state.currentList.itens;
+  const orcamento = Number(state.currentList.orcamento) || 0;
   let totalCarrinho = 0;
   let totalEstimado = 0;
   let totalEstimadoItensPegos = 0;
   let itensPegos = 0;
   const itensTotal = itens.length;
 
+  let totalEssenciais = 0;
+  let itensEssenciaisTotal = 0;
+  let itensEssenciaisPegos = 0;
+
   for (const item of itens) {
     const qtdPlan = Number(item.qtdPlanejada) || 0;
     const precoEst = Number(item.precoEstimado) || 0;
     totalEstimado += (qtdPlan * precoEst);
 
+    const isEssencial = Boolean(item.essencial);
+    if (isEssencial) {
+      itensEssenciaisTotal++;
+    }
+
     if (item.pego) {
       itensPegos++;
       const qtdReal = Number(item.qtdReal) || 0;
       const precoReal = Number(item.precoReal) || 0;
-      totalCarrinho += (qtdReal * precoReal);
+      const subtotalReal = (qtdReal * precoReal);
+      totalCarrinho += subtotalReal;
       totalEstimadoItensPegos += (qtdReal * precoEst);
+
+      if (isEssencial) {
+        itensEssenciaisPegos++;
+        totalEssenciais += subtotalReal;
+      }
+    } else {
+      if (isEssencial) {
+        // Se ainda não pego, soma a estimativa de gasto essencial
+        totalEssenciais += (qtdPlan * precoEst);
+      }
     }
   }
 
@@ -97,13 +124,22 @@ export function calculateTotals() {
   // Diferença: se compararmos o que já pegamos em relação ao estimado para esses itens
   const diferenca = totalCarrinho - totalEstimadoItensPegos;
 
+  const saldoRestante = orcamento > 0 ? (orcamento - totalCarrinho) : 0;
+  const percentualOrcamento = orcamento > 0 ? Math.round((totalCarrinho / orcamento) * 100) : 0;
+
   return {
     totalCarrinho: Math.round(totalCarrinho * 100) / 100,
     totalEstimado: Math.round(totalEstimado * 100) / 100,
     itensPegos,
     itensTotal,
     porcentagem,
-    diferenca: Math.round(diferenca * 100) / 100
+    diferenca: Math.round(diferenca * 100) / 100,
+    orcamento,
+    saldoRestante: Math.round(saldoRestante * 100) / 100,
+    percentualOrcamento,
+    totalEssenciais: Math.round(totalEssenciais * 100) / 100,
+    itensEssenciaisTotal,
+    itensEssenciaisPegos
   };
 }
 
@@ -157,6 +193,7 @@ export async function addItem(itemData) {
     qtdPlanejada: Number(itemData.qtdPlanejada) || 1,
     precoEstimado: Number(itemData.precoEstimado) || 0,
     pego: false,
+    essencial: Boolean(itemData.essencial),
     qtdReal: Number(itemData.qtdPlanejada) || 1,
     precoReal: 0,
     dataPego: null
@@ -172,6 +209,31 @@ export async function addItem(itemData) {
 
   notify();
   return newItem;
+}
+
+/**
+ * Define ou atualiza o teto de gastos (orçamento) da lista atual
+ */
+export async function setListBudget(budgetAmount) {
+  if (!state.currentList) return;
+  const num = Math.max(0, Number(budgetAmount) || 0);
+  state.currentList.orcamento = num;
+  await persistCurrentList();
+  notify();
+}
+
+/**
+ * Alterna rapidamente a prioridade de um item entre Essencial e Normal
+ */
+export async function toggleItemEssential(itemId) {
+  if (!state.currentList || !state.currentList.itens) return false;
+  const item = state.currentList.itens.find(i => i.id === itemId);
+  if (!item) return false;
+
+  item.essencial = !item.essencial;
+  await persistCurrentList();
+  notify();
+  return item.essencial;
 }
 
 /**
@@ -362,6 +424,7 @@ export async function addPriceEntryAndCartItem(data) {
       qtdPlanejada: Number(data.quantidade) || 1,
       precoEstimado: Number(data.preco) || 0,
       pego: true,
+      essencial: Boolean(data.essencial),
       qtdReal: Number(data.quantidade) || 1,
       precoReal: Number(data.preco) || 0,
       dataPego: new Date().toISOString()

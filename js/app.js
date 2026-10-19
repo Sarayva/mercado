@@ -111,5 +111,10 @@ function setupEventListeners() {
   }, { passive: false });
 }
 
-// Inicia o app assim que o DOM estiver pronto
-document.addEventListener('DOMContentLoaded', bootstrap);
+// Inicia o app assim que o DOM estiver pronto (suporta carregamento deferido de módulos ES)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap);
+} else {
+  bootstrap();
+}
+

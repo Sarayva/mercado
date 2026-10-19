@@ -3,7 +3,7 @@
    Controla a lista atual, totais em tempo real e pilha de Desfazer (Undo)
    ========================================================================== */
 
-import { saveList, getListById } from './db.js';
+import { saveList, getListById, savePreco } from './db.js';
 
 // Estado global da aplicação
 export const state = {
@@ -291,3 +291,80 @@ export async function clearCart() {
 
   notify();
 }
+
+/**
+ * Adiciona um item capturado via etiqueta de preço:
+ * 1. Grava no histórico de preços (IndexedDB)
+ * 2. Adiciona ou atualiza no carrinho da lista atual
+ * 3. Notifica para atualizar total ao vivo e progresso
+ */
+export async function addPriceEntryAndCartItem(data) {
+  if (!state.currentList.itens) {
+    state.currentList.itens = [];
+  }
+
+  // 1. Grava no histórico de preços
+  const precoEntry = await savePreco({
+    itemId: data.itemId || null,
+    nomeItem: data.nome,
+    valor: data.preco,
+    peso: data.peso || '',
+    unidade: data.unidade || 'un',
+    precoPorKgLitro: data.precoPorKgLitro || null,
+    quantidade: data.quantidade || 1,
+    mercado: data.mercado || 'Mercado Geral',
+    fotoUrl: data.fotoUrl || null,
+    origem: 'etiqueta'
+  });
+
+  // 2. Procura se o item já existia na lista atual
+  const existingIndex = state.currentList.itens.findIndex(
+    i => i.nome.toLowerCase().trim() === data.nome.toLowerCase().trim()
+  );
+
+  let affectedItem;
+  let previousState = null;
+  let isNew = false;
+
+  if (existingIndex !== -1) {
+    previousState = { ...state.currentList.itens[existingIndex] };
+    state.currentList.itens[existingIndex].pego = true;
+    state.currentList.itens[existingIndex].qtdReal = Number(data.quantidade) || 1;
+    state.currentList.itens[existingIndex].precoReal = Number(data.preco) || 0;
+    state.currentList.itens[existingIndex].dataPego = new Date().toISOString();
+    affectedItem = state.currentList.itens[existingIndex];
+  } else {
+    isNew = true;
+    affectedItem = {
+      id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      nome: data.nome.trim(),
+      categoria: data.categoria || 'Geral',
+      qtdPlanejada: Number(data.quantidade) || 1,
+      precoEstimado: Number(data.preco) || 0,
+      pego: true,
+      qtdReal: Number(data.quantidade) || 1,
+      precoReal: Number(data.preco) || 0,
+      dataPego: new Date().toISOString()
+    };
+    state.currentList.itens.unshift(affectedItem);
+  }
+
+  await persistCurrentList();
+
+  // 3. Suporte a Desfazer (Undo)
+  registerUndo(`Item "${data.nome}" adicionado da etiqueta`, async () => {
+    if (isNew) {
+      state.currentList.itens = state.currentList.itens.filter(i => i.id !== affectedItem.id);
+    } else {
+      const idx = state.currentList.itens.findIndex(i => i.id === affectedItem.id);
+      if (idx !== -1) {
+        state.currentList.itens[idx] = previousState;
+      }
+    }
+    await persistCurrentList();
+  });
+
+  notify();
+  return affectedItem;
+}
+

@@ -145,6 +145,51 @@ export async function getConfig(chave) {
 }
 
 /**
+ * Grava uma entrada no histórico de preços (Fase 2 & Fase 3)
+ */
+export async function savePreco(precoData) {
+  const db = await initDB();
+  const entry = {
+    id: precoData.id || 'preco_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    itemId: precoData.itemId || null,
+    nomeItem: precoData.nomeItem || '',
+    valor: Number(precoData.valor) || 0,
+    peso: precoData.peso || '',
+    unidade: precoData.unidade || 'un',
+    precoPorKgLitro: precoData.precoPorKgLitro || null,
+    quantidade: Number(precoData.quantidade) || 1,
+    data: precoData.data || new Date().toISOString(),
+    mercado: precoData.mercado || 'Mercado Geral',
+    fotoUrl: precoData.fotoUrl || null,
+    origem: precoData.origem || 'etiqueta'
+  };
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['precos'], 'readwrite');
+    const store = transaction.objectStore('precos');
+    const request = store.put(entry);
+
+    request.onsuccess = () => resolve(entry);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Retorna todos os preços registrados no histórico
+ */
+export async function getAllPrecos() {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['precos'], 'readonly');
+    const store = transaction.objectStore('precos');
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
  * Cria uma lista inicial de exemplo se o usuário for novo, para que ele possa testar na hora
  */
 export async function createDefaultListIfEmpty() {

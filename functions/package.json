@@ -1,0 +1,15 @@
+{
+  "name": "mercado-vision-functions",
+  "description": "Backend seguro para chamada da IA de Visão sem expor credenciais",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "firebase-functions": "^5.0.0",
+    "firebase-admin": "^12.0.0",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "private": true
+}

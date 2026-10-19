@@ -14,10 +14,13 @@ import {
   removeItem,
   clearCart,
   performUndo,
-  setCurrentList
+  setCurrentList,
+  addPriceEntryAndCartItem
 } from './state.js';
 
 import { getAllLists, saveList, setConfig } from './db.js';
+import { capturePriceTagPhoto } from './camera.js';
+import { analyzePriceTag } from './vision.js';
 
 // Utilitário para formatar moeda Real (BRL)
 export function formatCurrency(value) {
@@ -834,6 +837,214 @@ export async function openListManagerModal() {
     await setConfig('activeListId', newList.id);
     closeModal();
     showToast(`Nova lista "${nome}" criada!`);
+  });
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
+
+/**
+ * Inicia o fluxo de captura de foto da etiqueta e extração por IA (Fase 2)
+ */
+export async function handleCameraScan() {
+  try {
+    triggerHaptic();
+    // 1. Abre a câmera e comprime a foto
+    const photo = await capturePriceTagPhoto();
+
+    // 2. Exibe o modal de carregamento / leitura
+    modalContainer.innerHTML = `
+      <div class="modal-overlay">
+        <div style="background: var(--bg-card); padding: 28px 20px; border-radius: var(--radius-lg); text-align: center; border: 1px solid var(--border); max-width: 320px; width: 88%; box-shadow: 0 10px 30px rgba(0,0,0,0.7);">
+          <div class="scanning-spinner"></div>
+          <h4 style="margin-top: 16px; font-size: 1.15rem; color: var(--text-primary);">Lendo Etiqueta...</h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">Identificando produto, preço e peso pela foto.</p>
+        </div>
+      </div>
+    `;
+
+    // 3. Processa a imagem com IA de visão
+    const extractedData = await analyzePriceTag(photo.dataUrl);
+
+    // 4. Abre a tela de confirmação editável
+    openLabelConfirmSheet(extractedData, photo.dataUrl);
+  } catch (err) {
+    closeModal();
+    if (err.message && !err.message.includes('Nenhuma foto')) {
+      alert('Não foi possível ler a etiqueta: ' + err.message);
+    }
+  }
+}
+
+/**
+ * TELA DE CONFIRMAÇÃO (Fase 2):
+ * Mostra os campos preenchidos pela IA e editáveis antes de salvar
+ */
+export function openLabelConfirmSheet(extracted, photoDataUrl) {
+  let precoUnit = Number(extracted.preco) || 0;
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet" style="max-height: 92vh;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3 class="sheet-title">Confirmar Produto</h3>
+            <span class="item-subtitle" style="font-size: 0.8rem;">Verifique e ajuste os dados da etiqueta</span>
+          </div>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <!-- Preview da Foto Tirada -->
+        ${photoDataUrl ? `<img src="${photoDataUrl}" class="tag-preview-img" alt="Etiqueta capturada" />` : ''}
+
+        <form id="form-confirm-label">
+          <!-- Nome do Produto -->
+          <div class="form-group">
+            <label class="form-label">Nome do Produto *</label>
+            <input type="text" id="confirm-item-name" class="form-input" value="${escapeHTML(extracted.nome)}" required />
+          </div>
+
+          <!-- Preço Unitário -->
+          <div class="form-group">
+            <label class="form-label">Preço Unitário da Etiqueta *</label>
+            <div class="big-price-input-wrapper">
+              <span class="currency-prefix">R$</span>
+              <input 
+                type="number" 
+                step="0.01" 
+                inputmode="decimal" 
+                id="confirm-item-price" 
+                class="form-input big-price-input" 
+                value="${precoUnit > 0 ? precoUnit.toFixed(2) : ''}" 
+                placeholder="0,00"
+                required
+              />
+            </div>
+          </div>
+
+          <!-- Quantidade levada -->
+          <div class="form-group">
+            <label class="form-label">Quantidade Levada</label>
+            <div class="quantity-stepper">
+              <button type="button" class="stepper-btn" id="btn-confirm-minus">−</button>
+              <input type="number" step="any" min="0.1" id="confirm-item-qtd" class="stepper-input" value="1">
+              <button type="button" class="stepper-btn" id="btn-confirm-plus">+</button>
+            </div>
+          </div>
+
+          <!-- Peso / Volume e Preço por kg/L -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label class="form-label">Peso / Volume</label>
+              <input type="text" id="confirm-item-peso" class="form-input" value="${escapeHTML(extracted.peso || '')}" placeholder="Ex: 5kg, 1L" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Preço por kg/L</label>
+              <input type="text" id="confirm-item-rate" class="form-input" value="${escapeHTML(extracted.precoPorKgLitro || '')}" placeholder="Ex: R$ 5,60/kg" />
+            </div>
+          </div>
+
+          <!-- Mercado -->
+          <div class="form-group">
+            <label class="form-label">Supermercado</label>
+            <input type="text" id="confirm-item-mercado" class="form-input" value="${escapeHTML(extracted.mercado || 'Supermercado Central')}" placeholder="Nome do mercado" />
+          </div>
+
+          <!-- Subtotal ao vivo do Item -->
+          <div class="item-live-subtotal">
+            <span class="subtotal-calc" id="confirm-subtotal-calc">1 x ${formatCurrency(precoUnit)}</span>
+            <span class="subtotal-amount" id="confirm-subtotal-val">${formatCurrency(precoUnit)}</span>
+          </div>
+
+          <!-- Ações -->
+          <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <button type="button" id="btn-retake-photo" class="sheet-btn-secondary" style="white-space: nowrap;">
+              📷 Tirar Outra
+            </button>
+            <button type="submit" class="sheet-btn-primary">
+              ✓ Adicionar ao Carrinho
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  const inputName = document.getElementById('confirm-item-name');
+  const inputPrice = document.getElementById('confirm-item-price');
+  const inputQtd = document.getElementById('confirm-item-qtd');
+  const inputPeso = document.getElementById('confirm-item-peso');
+  const inputRate = document.getElementById('confirm-item-rate');
+  const inputMercado = document.getElementById('confirm-item-mercado');
+  const subtotalCalc = document.getElementById('confirm-subtotal-calc');
+  const subtotalVal = document.getElementById('confirm-subtotal-val');
+  const btnMinus = document.getElementById('btn-confirm-minus');
+  const btnPlus = document.getElementById('btn-confirm-plus');
+  const btnRetake = document.getElementById('btn-retake-photo');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const overlay = document.getElementById('sheet-overlay');
+  const form = document.getElementById('form-confirm-label');
+
+  function updateConfirmSubtotal() {
+    const p = parseFloat(inputPrice.value) || 0;
+    const q = parseFloat(inputQtd.value) || 0;
+    subtotalCalc.textContent = `${q} x ${formatCurrency(p)}`;
+    subtotalVal.textContent = formatCurrency(p * q);
+  }
+
+  inputPrice.addEventListener('input', updateConfirmSubtotal);
+  inputQtd.addEventListener('input', updateConfirmSubtotal);
+
+  btnMinus.addEventListener('click', () => {
+    triggerHaptic();
+    let current = parseFloat(inputQtd.value) || 1;
+    if (current > 1) {
+      inputQtd.value = current - 1;
+    } else if (current > 0.1) {
+      inputQtd.value = (current - 0.1).toFixed(1);
+    }
+    updateConfirmSubtotal();
+  });
+
+  btnPlus.addEventListener('click', () => {
+    triggerHaptic();
+    let current = parseFloat(inputQtd.value) || 0;
+    inputQtd.value = current + 1;
+    updateConfirmSubtotal();
+  });
+
+  btnRetake.addEventListener('click', () => {
+    handleCameraScan();
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    triggerHaptic();
+
+    const nome = inputName.value.trim();
+    const preco = parseFloat(inputPrice.value) || 0;
+    const quantidade = parseFloat(inputQtd.value) || 1;
+    const peso = inputPeso.value.trim();
+    const precoPorKgLitro = inputRate.value.trim();
+    const mercado = inputMercado.value.trim();
+
+    // Grava entrada em precos e coloca direto no carrinho
+    await addPriceEntryAndCartItem({
+      nome,
+      preco,
+      quantidade,
+      peso,
+      precoPorKgLitro,
+      mercado,
+      fotoUrl: photoDataUrl
+    });
+
+    closeModal();
+    showToast(`"${nome}" confirmado no carrinho!`);
   });
 
   btnClose.addEventListener('click', closeModal);

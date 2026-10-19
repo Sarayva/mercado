@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    CSS Principal - Meu Mercado PWA (Mobile-First Premium)
    Paleta escura moderna, tipografia fluida e safe-areas nativas
    ========================================================================== */
@@ -541,31 +541,69 @@ input, textarea {
   z-index: 90;
   display: flex;
   justify-content: center;
-  padding: 0 16px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
   pointer-events: none;
 }
 
 .btn-floating-action {
   pointer-events: auto;
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  color: #ffffff;
-  border: none;
   border-radius: var(--radius-pill);
-  padding: 12px 24px;
-  font-size: 0.98rem;
+  padding: 10px 18px;
+  font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0 6px 20px rgba(13, 148, 136, 0.45);
-  min-height: 48px;
+  gap: 7px;
+  min-height: 46px;
+  transition: transform 0.1s ease;
 }
 
 .btn-floating-action:active {
-  transform: scale(0.97);
-  filter: brightness(0.95);
+  transform: scale(0.96);
 }
+
+.btn-camera-action {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+}
+
+.btn-manual-action {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+/* Spinner e Preview da Etiqueta */
+.scanning-spinner {
+  width: 44px;
+  height: 44px;
+  border: 4px solid var(--border);
+  border-top-color: var(--primary-light);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.tag-preview-img {
+  width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+  background: #000;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+}
+
 
 /* --- MODAIS & BOTTOM SHEETS --- */
 .modal-overlay {

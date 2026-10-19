@@ -5,7 +5,7 @@
 
 import { initDB, createDefaultListIfEmpty, getConfig, getListById } from './db.js';
 import { state, setCurrentList, setMode, subscribe } from './state.js';
-import { renderUI, openAddItemModal, openListManagerModal } from './ui.js';
+import { renderUI, openAddItemModal, openListManagerModal, handleCameraScan } from './ui.js';
 import { initFirebase } from './firebase-config.js';
 
 /**
@@ -94,6 +94,14 @@ function setupEventListeners() {
   if (tabPlanejando) {
     tabPlanejando.addEventListener('click', () => {
       setMode('planejando');
+    });
+  }
+
+  // Botão Fixo Inferior de Fotografar Etiqueta com IA
+  const btnCameraBottom = document.getElementById('btn-camera-bottom');
+  if (btnCameraBottom) {
+    btnCameraBottom.addEventListener('click', () => {
+      handleCameraScan();
     });
   }
 

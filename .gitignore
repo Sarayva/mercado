@@ -1,5 +1,33 @@
+# Sistema Operacional e Editores
 .DS_Store
 Thumbs.db
 *.log
+browser_err.log
 .vscode/
 .idea/
+
+# Variaveis de Ambiente e Chaves de API
+.env
+.env.*
+*.env
+*.local
+*.pem
+*.key
+
+# Credenciais e Contas de Servico (Firebase / GCP / AWS)
+*credentials*.json
+*serviceAccount*.json
+*service-account*.json
+firebase-adminsdk*.json
+
+# Firebase CLI & Emuladores
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# Dependencias Node (Cloud Functions)
+node_modules/
+functions/node_modules/
+.npm
+

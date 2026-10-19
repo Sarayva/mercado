@@ -21,10 +21,11 @@ export const DEFAULT_FIREBASE_CONFIG = {
 export const API_VISION_PROXY_URL = "/api/vision-etiqueta";
 
 let firestoreInstance = null;
+let authInstance = null;
 let isFirebaseInitialized = false;
 
 /**
- * Inicializa o Firestore se as credenciais estiverem preenchidas
+ * Inicializa o Firestore e Auth se as credenciais estiverem preenchidas
  */
 export async function initFirebase(customConfig = null) {
   const config = customConfig || DEFAULT_FIREBASE_CONFIG;
@@ -37,7 +38,8 @@ export async function initFirebase(customConfig = null) {
   try {
     // Importação dinâmica do Firebase v10 modular via ESM CDN
     const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-    const { getFirestore, persistentLocalCache, initializeFirestore } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const { persistentLocalCache, initializeFirestore } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const { getAuth, signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
 
     const app = initializeApp(config);
     
@@ -46,13 +48,43 @@ export async function initFirebase(customConfig = null) {
       localCache: persistentLocalCache()
     });
 
+    // Inicializa Firebase Auth para proteção das Cloud Functions e regras de segurança
+    authInstance = getAuth(app);
+    if (!authInstance.currentUser) {
+      await signInAnonymously(authInstance);
+    }
+
     isFirebaseInitialized = true;
-    console.info('[Firebase] Firestore conectado com sucesso e cache local ativo!');
+    console.info('[Firebase] Firestore e Auth conectados com sucesso!');
     return firestoreInstance;
   } catch (error) {
-    console.warn('[Firebase] Não foi possível conectar ao Firestore online. Usando IndexedDB local.', error);
+    console.warn('[Firebase] Não foi possível conectar ao Firebase online. Usando IndexedDB local.', error);
     return null;
   }
+}
+
+/**
+ * Retorna o ID Token do usuário autenticado para envio nos headers de APIs seguras
+ */
+export async function getAuthToken() {
+  if (!authInstance) return null;
+  try {
+    if (!authInstance.currentUser) {
+      const { signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+      await signInAnonymously(authInstance);
+    }
+    return authInstance.currentUser ? await authInstance.currentUser.getIdToken() : null;
+  } catch (err) {
+    console.warn('[Firebase Auth] Erro ao obter token:', err);
+    return null;
+  }
+}
+
+/**
+ * Retorna o UID do usuário autenticado no Firebase
+ */
+export function getFirebaseUserId() {
+  return authInstance && authInstance.currentUser ? authInstance.currentUser.uid : null;
 }
 
 /**
@@ -61,3 +93,4 @@ export async function initFirebase(customConfig = null) {
 export function isFirestoreActive() {
   return isFirebaseInitialized && firestoreInstance !== null;
 }
+

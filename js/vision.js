@@ -3,119 +3,138 @@
    Extração inteligente de dados da etiqueta de preço no supermercado
    
    DIRETRIZ DE SEGURANÇA:
-   - Chaves de API nunca são expostas no código público do front-end.
-   - A chamada é roteada prioritariamente para o backend seguro / Cloud Function.
+   - NUNCA expor chaves de API de IA no front-end.
+   - Chamadas são sempre roteadas para a Cloud Function com autenticação.
    ========================================================================== */
 
 import { getConfig } from './db.js';
+import { getAuthToken } from './firebase-config.js';
 
-// URL padrão do backend proxy (pode ser sobrescrita pelo usuário nas configurações do app)
-const DEFAULT_VISION_PROXY_URL = '/api/analyze-tag';
+// URL padrão da Cloud Function (configurável no app pelo usuário)
+const DEFAULT_FUNCTION_URL = '/api/analyze-tag';
+const REQUEST_TIMEOUT_MS = 15000; // 15 segundos de timeout
 
 /**
- * Envia a imagem da etiqueta para análise e extração dos dados
- * Retorna os dados estruturados: { nome, preco, peso, unidade, precoPorKgLitro, mercado }
+ * Envia a imagem da etiqueta para a Cloud Function de visão.
+ * Em qualquer caso de erro (sem internet, timeout, etiqueta ilegível),
+ * retorna um resultado seguro com campos em branco e aviso amigável,
+ * permitindo o preenchimento manual na tela de confirmação sem perder a foto.
  */
 export async function analyzePriceTag(imageBase64) {
-  const configuredProxyUrl = await getConfig('visionProxyUrl') || DEFAULT_VISION_PROXY_URL;
-  const customDevApiKey = await getConfig('customDevApiKey'); // Opcional para testes locais
+  // 1. Flag de Desenvolvimento (opcional, desligada por padrão)
+  const isDevSimulation = (await getConfig('devVisionSimulation')) === true;
+  if (isDevSimulation) {
+    console.info('[Vision] Modo de simulação de desenvolvimento ativo.');
+    await new Promise((r) => setTimeout(r, 1200));
+    return getSimulatedVisionResult();
+  }
 
-  // 1. Tentativa via Proxy Seguro / Backend (Cloud Function)
+  // 2. Verificação prévia de conexão de rede
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    console.warn('[Vision] Dispositivo offline.');
+    return createFallbackResult('Sem conexão de internet no momento. Preencha os dados da etiqueta abaixo:');
+  }
+
+  const endpointUrl = (await getConfig('visionFunctionUrl')) || (await getConfig('visionProxyUrl')) || DEFAULT_FUNCTION_URL;
+
+  // 3. Chamada à Cloud Function com Timeout e Token de Autenticação
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
-    const response = await fetch(configuredProxyUrl, {
+    const idToken = await getAuthToken();
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+
+    if (idToken) {
+      headers['Authorization'] = `Bearer ${idToken}`;
+    }
+
+    const response = await fetch(endpointUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        image: imageBase64
-      })
+      headers,
+      body: JSON.stringify({ image: imageBase64 }),
+      signal: controller.signal
     });
 
+    clearTimeout(timeoutId);
+
     if (response.ok) {
-      const result = await response.json();
-      return sanitizeVisionResult(result);
+      const data = await response.json();
+      return sanitizeVisionResult(data);
     }
+
+    // Tratamento de respostas de erro da Cloud Function
+    if (response.status === 429) {
+      const errJson = await response.json().catch(() => ({}));
+      return createFallbackResult(errJson.error || 'Limite diário de leituras atingido. Preencha manualmente:');
+    }
+
+    if (response.status === 401) {
+      return createFallbackResult('Autenticação necessária na Cloud Function. Preencha manualmente:');
+    }
+
+    if (response.status === 413) {
+      return createFallbackResult('A foto ficou muito grande. Tente novamente ou preencha manualmente:');
+    }
+
+    console.warn(`[Vision] Servidor retornou status ${response.status}.`);
+    return createFallbackResult('Não foi possível ler a etiqueta automaticamente. Preencha os campos abaixo:');
   } catch (err) {
-    console.info('[Vision] Proxy não detectado ou indisponível. Verificando alternativas de desenvolvimento...', err);
-  }
+    clearTimeout(timeoutId);
 
-  // 2. Modo Desenvolvimento: Se o usuário salvou uma chave direta no IndexedDB do celular
-  if (customDevApiKey) {
-    try {
-      return await callDirectVisionApi(imageBase64, customDevApiKey);
-    } catch (err) {
-      console.warn('[Vision] Erro ao chamar API direta:', err);
+    if (err.name === 'AbortError') {
+      console.warn('[Vision] Timeout na leitura da etiqueta (mais de 15s).');
+      return createFallbackResult('Tempo de resposta esgotado. A conexão pode estar lenta. Preencha manualmente:');
     }
+
+    console.warn('[Vision] Falha na comunicação com a Cloud Function:', err.message);
+    return createFallbackResult('Não foi possível conectar ao serviço de visão. Preencha manualmente:');
   }
-
-  // 3. Fallback Inteligente de Simulação (Permite testar todo o fluxo da Fase 2 no celular mesmo sem o backend deployado)
-  console.info('[Vision] Utilizando extrator simulado para validação do fluxo no celular.');
-  await new Promise(resolve => setTimeout(resolve, 1500)); // Simula latência de rede da IA (1.5s)
-
-  return getSimulatedVisionResult();
 }
 
 /**
  * Normaliza e valida os dados retornados pela IA
  */
 function sanitizeVisionResult(raw) {
+  const precoNum = parseFloat(raw.preco);
+  const confiancaNum = typeof raw.confianca === 'number' ? raw.confianca : 0.8;
+  const isIlegivel = !raw.nome && (!precoNum || precoNum <= 0);
+
   return {
-    nome: raw.nome ? String(raw.nome).trim() : 'Produto sem nome',
-    preco: parseFloat(raw.preco) || 0,
+    sucesso: !isIlegivel,
+    nome: raw.nome ? String(raw.nome).trim() : '',
+    preco: !isNaN(precoNum) && precoNum > 0 ? Number(precoNum.toFixed(2)) : 0,
     peso: raw.peso ? String(raw.peso).trim() : '',
     unidade: raw.unidade ? String(raw.unidade).trim() : 'un',
-    precoPorKgLitro: raw.precoPorKgLitro ? String(raw.precoPorKgLitro).trim() : null,
-    mercado: raw.mercado ? String(raw.mercado).trim() : 'Mercado Atual',
-    confianca: raw.confianca || 0.95
+    precoPorKgLitro: raw.precoPorKgLitro ? String(raw.precoPorKgLitro).trim() : '',
+    mercado: raw.mercado ? String(raw.mercado).trim() : '',
+    confianca: confiancaNum,
+    aviso: isIlegivel ? 'Etiqueta com leitura parcial ou ilegível. Por favor, confira os valores abaixo:' : null
   };
 }
 
 /**
- * Chamada de desenvolvimento caso o usuário queira fornecer uma chave própria salva no celular
+ * Objeto de fallback padrão quando a IA não consegue ler ou ocorre falha de conexão
  */
-async function callDirectVisionApi(imageBase64, apiKey) {
-  // Chamada para Gemini 1.5 Flash ou Claude 3.5 Haiku via endpoint público do provedor
-  const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
-
-  const prompt = `Analise a foto desta etiqueta de supermercado brasileiro e extraia em JSON:
-{
-  "nome": "Nome comercial do produto com marca se legível",
-  "preco": 0.00 (número float do preço à vista),
-  "peso": "Ex: 1kg, 500g, 1L ou vazio se não houver",
-  "unidade": "Ex: kg, g, L, ml, un",
-  "precoPorKgLitro": "Ex: R$ 25,90/kg ou vazio se não houver",
-  "mercado": "Nome do mercado se visível na etiqueta ou vazio"
-}`;
-
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { text: prompt },
-          { inline_data: { mime_type: 'image/jpeg', data: cleanBase64 } }
-        ]
-      }],
-      generationConfig: {
-        response_mime_type: "application/json"
-      }
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error('Falha na API de visão: ' + response.statusText);
-  }
-
-  const data = await response.json();
-  const textJson = data.candidates[0].content.parts[0].text;
-  const parsed = JSON.parse(textJson);
-  return sanitizeVisionResult(parsed);
+function createFallbackResult(mensagemAviso) {
+  return {
+    sucesso: false,
+    nome: '',
+    preco: 0,
+    peso: '',
+    unidade: 'un',
+    precoPorKgLitro: '',
+    mercado: '',
+    confianca: 0.0,
+    aviso: mensagemAviso
+  };
 }
 
 /**
- * Simulação com dados típicos de mercado para teste de tela imediato
+ * Simulação de desenvolvimento para testes de interface offline
+ * ATIVADA SOMENTE se a flag `devVisionSimulation: true` estiver salva no IndexedDB
  */
 function getSimulatedVisionResult() {
   const mockOptions = [
@@ -125,7 +144,8 @@ function getSimulatedVisionResult() {
       peso: '5kg',
       unidade: 'kg',
       precoPorKgLitro: 'R$ 5,60/kg',
-      mercado: 'Supermercado Central'
+      mercado: 'Supermercado Central',
+      confianca: 0.95
     },
     {
       nome: 'Leite Integral UHT 1L',
@@ -133,26 +153,24 @@ function getSimulatedVisionResult() {
       peso: '1L',
       unidade: 'L',
       precoPorKgLitro: 'R$ 4,69/L',
-      mercado: 'Supermercado Central'
+      mercado: 'Supermercado Central',
+      confianca: 0.92
     },
     {
       nome: 'Café Torrado e Moído 500g',
-      preco: 19.90,
+      preco: 19.9,
       peso: '500g',
       unidade: 'g',
       precoPorKgLitro: 'R$ 39,80/kg',
-      mercado: 'Supermercado Central'
-    },
-    {
-      nome: 'Detergente Líquido 500ml',
-      preco: 2.39,
-      peso: '500ml',
-      unidade: 'ml',
-      precoPorKgLitro: 'R$ 4,78/L',
-      mercado: 'Supermercado Central'
+      mercado: 'Supermercado Central',
+      confianca: 0.88
     }
   ];
 
   const random = mockOptions[Math.floor(Math.random() * mockOptions.length)];
-  return sanitizeVisionResult(random);
+  return {
+    sucesso: true,
+    ...random,
+    aviso: null
+  };
 }

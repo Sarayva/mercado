@@ -766,6 +766,8 @@ export function openEditItemModal(itemId) {
  */
 export async function openListManagerModal() {
   const lists = await getAllLists();
+  const currentVisionUrl = (await getConfig('visionFunctionUrl')) || '';
+  const isDevSim = (await getConfig('devVisionSimulation')) === true;
 
   modalContainer.innerHTML = `
     <div class="modal-overlay" id="sheet-overlay">
@@ -797,6 +799,28 @@ export async function openListManagerModal() {
             </button>
           </div>
         </div>
+
+        <!-- Configurações da IA de Visão -->
+        <div style="border-top: 1px solid var(--border); padding-top: 14px; margin-top: 16px;">
+          <h4 style="font-size: 0.92rem; margin-bottom: 10px; color: var(--text-secondary);">⚙️ Configurações da IA de Visão</h4>
+          
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label class="form-label" style="font-size: 0.78rem;">URL da Cloud Function (analyzePriceTag)</label>
+            <input type="url" id="input-vision-url" class="form-input" style="font-size: 0.85rem; padding: 10px 12px;" placeholder="https://<regiao>-<projeto>.cloudfunctions.net/analyzePriceTag" value="${escapeHTML(currentVisionUrl)}" />
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; background: var(--bg); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Simulação Offline de Teste</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Gera dados fictícios sem chamar a nuvem</div>
+            </div>
+            <input type="checkbox" id="check-dev-sim" ${isDevSim ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;" />
+          </div>
+
+          <button id="btn-save-vision-config" class="sheet-btn-secondary" style="width: 100%; font-size: 0.88rem; padding: 10px;">
+            Salvar Configurações
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -805,6 +829,9 @@ export async function openListManagerModal() {
   const btnClose = document.getElementById('btn-close-sheet');
   const btnCreate = document.getElementById('btn-create-list');
   const inputNewName = document.getElementById('input-new-list-name');
+  const btnSaveVision = document.getElementById('btn-save-vision-config');
+  const inputVisionUrl = document.getElementById('input-vision-url');
+  const checkDevSim = document.getElementById('check-dev-sim');
 
   modalContainer.querySelectorAll('.item-card[data-list-id]').forEach(card => {
     card.addEventListener('click', async () => {
@@ -839,6 +866,18 @@ export async function openListManagerModal() {
     showToast(`Nova lista "${nome}" criada!`);
   });
 
+  btnSaveVision.addEventListener('click', async () => {
+    triggerHaptic();
+    const url = inputVisionUrl.value.trim();
+    const simEnabled = checkDevSim.checked;
+
+    await setConfig('visionFunctionUrl', url);
+    await setConfig('devVisionSimulation', simEnabled);
+
+    showToast(simEnabled ? 'Simulação ativada!' : 'Configurações de IA salvas!');
+    closeModal();
+  });
+
   btnClose.addEventListener('click', closeModal);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) closeModal();
@@ -849,10 +888,11 @@ export async function openListManagerModal() {
  * Inicia o fluxo de captura de foto da etiqueta e extração por IA (Fase 2)
  */
 export async function handleCameraScan() {
+  let photo = null;
   try {
     triggerHaptic();
     // 1. Abre a câmera e comprime a foto
-    const photo = await capturePriceTagPhoto();
+    photo = await capturePriceTagPhoto();
 
     // 2. Exibe o modal de carregamento / leitura
     modalContainer.innerHTML = `
@@ -865,15 +905,34 @@ export async function handleCameraScan() {
       </div>
     `;
 
-    // 3. Processa a imagem com IA de visão
+    // 3. Processa a imagem com IA de visão (ou recebe fallback seguro caso falhe)
     const extractedData = await analyzePriceTag(photo.dataUrl);
 
-    // 4. Abre a tela de confirmação editável
+    // 4. Abre a tela de confirmação editável com a foto preservada
     openLabelConfirmSheet(extractedData, photo.dataUrl);
   } catch (err) {
-    closeModal();
-    if (err.message && !err.message.includes('Nenhuma foto')) {
-      alert('Não foi possível ler a etiqueta: ' + err.message);
+    if (err.message && err.message.includes('Nenhuma foto')) {
+      // Usuário cancelou ou fechou a câmera
+      closeModal();
+      return;
+    }
+
+    console.warn('[Camera/Vision] Falha durante o escaneamento:', err);
+    // Em caso de qualquer erro imprevisto, se temos a foto, cai no preenchimento manual sem perder a foto
+    if (photo && photo.dataUrl) {
+      openLabelConfirmSheet({
+        sucesso: false,
+        nome: '',
+        preco: 0,
+        peso: '',
+        unidade: 'un',
+        precoPorKgLitro: '',
+        mercado: '',
+        confianca: 0.0,
+        aviso: 'Não foi possível ler a etiqueta automaticamente. Digite os dados abaixo:'
+      }, photo.dataUrl);
+    } else {
+      closeModal();
     }
   }
 }
@@ -884,6 +943,7 @@ export async function handleCameraScan() {
  */
 export function openLabelConfirmSheet(extracted, photoDataUrl) {
   let precoUnit = Number(extracted.preco) || 0;
+  const confiancaPct = extracted.confianca ? Math.round(extracted.confianca * 100) : 0;
 
   modalContainer.innerHTML = `
     <div class="modal-overlay" id="sheet-overlay">
@@ -892,10 +952,21 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
         <div class="sheet-header">
           <div>
             <h3 class="sheet-title">Confirmar Produto</h3>
-            <span class="item-subtitle" style="font-size: 0.8rem;">Verifique e ajuste os dados da etiqueta</span>
+            <span class="item-subtitle" style="font-size: 0.8rem;">
+              ${extracted.sucesso && confiancaPct >= 80 
+                ? `✓ Lido por IA (${confiancaPct}% de confiança)` 
+                : 'Verifique e ajuste os dados da etiqueta'}
+            </span>
           </div>
           <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
         </div>
+
+        ${extracted.aviso ? `
+          <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); color: #facc15; padding: 10px 14px; border-radius: var(--radius-md); font-size: 0.84rem; margin-bottom: 14px; line-height: 1.4; display: flex; align-items: flex-start; gap: 8px;">
+            <span style="font-size: 1.1rem; line-height: 1;">⚠️</span>
+            <span>${escapeHTML(extracted.aviso)}</span>
+          </div>
+        ` : ''}
 
         <!-- Preview da Foto Tirada -->
         ${photoDataUrl ? `<img src="${photoDataUrl}" class="tag-preview-img" alt="Etiqueta capturada" />` : ''}

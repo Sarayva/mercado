@@ -1,6 +1,6 @@
 /* ==========================================================================
-   Camada de Interface do Usuário (UI) - Meu Mercado PWA
-   Renderização, Modais deslizantes, Toasts e Toque com uma mão
+   Camada de Interface do Usuário (UI) - Meu Mercado PWA (Mobile-First)
+   Renderização fluida, Modais deslizantes, Toasts e Toque com uma mão
    ========================================================================== */
 
 import {
@@ -41,13 +41,13 @@ function escapeHTML(str) {
     .replace(/'/g, '&#039;');
 }
 
-// Feedback háptico (vibração no celular se suportado)
+// Feedback háptico (vibração sutil no celular se suportado)
 function triggerHaptic() {
   if ('vibrate' in navigator) {
     try {
       navigator.vibrate(25);
     } catch (e) {
-      // Ignora silenciosamente se o navegador bloquear
+      // Ignora silenciosamente se o navegador não permitir
     }
   }
 }
@@ -88,11 +88,11 @@ export function showToast(message, canUndo = true) {
 
   toastTimeout = setTimeout(() => {
     container.innerHTML = '';
-  }, 5500);
+  }, 5000);
 }
 
 /**
- * Renderiza o Header Fixo com os totais ao vivo e progresso
+ * Renderiza o Header Slim Fixo com os totais ao vivo e progresso
  */
 export function renderHeader() {
   const totals = calculateTotals();
@@ -104,7 +104,7 @@ export function renderHeader() {
   const progressFillEl = document.getElementById('header-progress-fill');
 
   if (listNameEl) {
-    listNameEl.textContent = state.currentList ? state.currentList.nome : 'Sem Lista';
+    listNameEl.textContent = state.currentList ? state.currentList.nome : 'Minha Lista';
   }
 
   if (totalValueEl) {
@@ -117,22 +117,22 @@ export function renderHeader() {
 
   if (diffBadgeEl) {
     if (totals.itensPegos === 0) {
-      diffBadgeEl.textContent = 'Estimativa total';
-      diffBadgeEl.className = 'diff-badge neutral';
+      diffBadgeEl.textContent = 'Estimativa';
+      diffBadgeEl.className = 'diff-tag neutral';
     } else if (totals.diferenca < 0) {
-      diffBadgeEl.textContent = `Economia ${formatCurrency(Math.abs(totals.diferenca))}`;
-      diffBadgeEl.className = 'diff-badge saving';
+      diffBadgeEl.textContent = `-${formatCurrency(Math.abs(totals.diferenca))}`;
+      diffBadgeEl.className = 'diff-tag saving';
     } else if (totals.diferenca > 0) {
       diffBadgeEl.textContent = `+${formatCurrency(totals.diferenca)}`;
-      diffBadgeEl.className = 'diff-badge exceeded';
+      diffBadgeEl.className = 'diff-tag exceeded';
     } else {
-      diffBadgeEl.textContent = 'Dentro do esperado';
-      diffBadgeEl.className = 'diff-badge neutral';
+      diffBadgeEl.textContent = 'No valor';
+      diffBadgeEl.className = 'diff-tag neutral';
     }
   }
 
   if (progressTextEl) {
-    progressTextEl.textContent = `${totals.itensPegos} de ${totals.itensTotal} itens (${totals.porcentagem}%)`;
+    progressTextEl.textContent = `${totals.itensPegos} de ${totals.itensTotal} (${totals.porcentagem}%)`;
   }
 
   if (progressFillEl) {
@@ -141,7 +141,7 @@ export function renderHeader() {
 }
 
 /**
- * Renderiza o Seletor de Modo (Abas Comprando vs Editar Lista)
+ * Renderiza o Seletor de Modo (Segmented Control no Header)
  */
 export function renderModeSwitcher() {
   const tabComprando = document.getElementById('tab-mode-comprando');
@@ -169,9 +169,9 @@ export function renderListContent() {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">🛒</div>
-        <h3>Sua lista está vazia!</h3>
-        <p>Adicione itens que você planeja comprar no mercado.</p>
-        <button id="btn-empty-add-item" class="btn-primary-action" style="margin-top: 16px;">
+        <h3 style="font-size: 1.15rem; color: var(--text-primary);">Sua lista está vazia</h3>
+        <p style="font-size: 0.9rem;">Toque no botão abaixo para adicionar itens.</p>
+        <button id="btn-empty-add-item" class="btn-floating-action" style="margin-top: 14px; position: static;">
           + Adicionar Primeiro Item
         </button>
       </div>
@@ -206,16 +206,16 @@ function renderShoppingMode(container) {
       <span class="section-title">
         <span>📋 A Pegar</span>
       </span>
-      <span class="section-count">${pendentes.length}</span>
+      <span class="section-badge">${pendentes.length}</span>
     </div>
     <div class="items-group">
   `;
 
   if (pendentes.length === 0) {
     html += `
-      <div class="empty-state" style="padding: 24px 16px;">
-        <span style="font-size: 2rem;">🎉</span>
-        <p class="fw-semibold text-success">Tudo pego! Nenhum item pendente.</p>
+      <div class="empty-state" style="padding: 20px 14px;">
+        <span style="font-size: 1.8rem;">🎉</span>
+        <p class="fw-semibold text-success" style="font-size: 0.92rem;">Tudo pego! Nenhum item pendente.</p>
       </div>
     `;
   } else {
@@ -225,16 +225,18 @@ function renderShoppingMode(container) {
       
       html += `
         <div class="item-card tap-highlight" data-item-id="${item.id}" data-action="pick">
-          <div class="item-checkbox" data-checkbox="true">✓</div>
+          <div class="item-checkbox-wrapper" data-checkbox="true">
+            <div class="item-checkbox">✓</div>
+          </div>
           <div class="item-details">
             <div class="item-name-row">
               <span class="item-name">${escapeHTML(item.nome)}</span>
               ${item.categoria && item.categoria !== 'Geral' ? `<span class="item-category-tag">${escapeHTML(item.categoria)}</span>` : ''}
             </div>
-            <span class="item-subtitle">Qtd: ${qtdText}${precoEstText}</span>
+            <span class="item-subtitle">${qtdText}${precoEstText}</span>
           </div>
           <div class="item-price-info">
-            <span class="text-primary fw-bold" style="font-size: 0.9rem;">Pegar ➔</span>
+            <span class="item-pick-hint">Pegar ➔</span>
           </div>
         </div>
       `;
@@ -246,14 +248,14 @@ function renderShoppingMode(container) {
   // Seção de Itens Já no Carrinho
   if (noCarrinho.length > 0) {
     html += `
-      <div class="section-header" style="margin-top: 28px;">
+      <div class="section-header" style="margin-top: 24px;">
         <span class="section-title">
           <span>✅ No Carrinho</span>
         </span>
         <div style="display: flex; gap: 8px; align-items: center;">
-          <span class="section-count">${noCarrinho.length}</span>
-          <button id="btn-clear-cart" class="btn-secondary-action" style="padding: 4px 10px; font-size: 0.78rem; min-height: 28px; border-radius: 6px;">
-            Limpar Carrinho
+          <span class="section-badge">${noCarrinho.length}</span>
+          <button id="btn-clear-cart" class="action-icon-btn" style="width: auto; padding: 2px 8px; font-size: 0.75rem; border: 1px solid var(--border);" title="Limpar Carrinho">
+            Limpar
           </button>
         </div>
       </div>
@@ -266,7 +268,9 @@ function renderShoppingMode(container) {
 
       html += `
         <div class="item-card taken tap-highlight" data-item-id="${item.id}" data-action="edit-cart">
-          <div class="item-checkbox" data-checkbox="true">✓</div>
+          <div class="item-checkbox-wrapper" data-checkbox="true">
+            <div class="item-checkbox">✓</div>
+          </div>
           <div class="item-details">
             <div class="item-name-row">
               <span class="item-name">${escapeHTML(item.nome)}</span>
@@ -296,15 +300,12 @@ function renderShoppingMode(container) {
       triggerHaptic();
 
       if (action === 'pick') {
-        // Abre o modal rápido para informar preço real e quantidade
         openCartSheet(itemId);
       } else if (action === 'edit-cart') {
         if (isCheckbox) {
-          // Se tocou direto no checkbox marcado, devolve pra lista pendente
           returnItemToPending(itemId);
           showToast(`Item devolvido para a lista.`);
         } else {
-          // Se tocou no corpo do card, abre para ajustar valor ou quantidade
           openCartSheet(itemId, true);
         }
       }
@@ -334,7 +335,7 @@ function renderPlanningMode(container) {
       <span class="section-title">
         <span>📝 Itens Planejados</span>
       </span>
-      <span class="section-count">${itens.length}</span>
+      <span class="section-badge">${itens.length}</span>
     </div>
     <div class="items-group">
   `;
@@ -343,8 +344,8 @@ function renderPlanningMode(container) {
     const qtdText = `${item.qtdPlanejada || 1} un`;
     const estTotal = (item.qtdPlanejada || 1) * (item.precoEstimado || 0);
     const precoText = item.precoEstimado > 0 
-      ? `Est: ${formatCurrency(item.precoEstimado)} (Total: ${formatCurrency(estTotal)})`
-      : 'Sem preço estimado';
+      ? `Est: ${formatCurrency(item.precoEstimado)} (Tot: ${formatCurrency(estTotal)})`
+      : 'Sem estimativa';
 
     html += `
       <div class="item-card" data-item-id="${item.id}">
@@ -353,11 +354,11 @@ function renderPlanningMode(container) {
             <span class="item-name">${escapeHTML(item.nome)}</span>
             <span class="item-category-tag">${escapeHTML(item.categoria || 'Geral')}</span>
           </div>
-          <span class="item-subtitle">Qtd: ${qtdText} • ${precoText}</span>
+          <span class="item-subtitle">${qtdText} • ${precoText}</span>
         </div>
-        <div style="display: flex; gap: 8px;">
-          <button class="icon-btn btn-edit-item" data-id="${item.id}" title="Editar">✏️</button>
-          <button class="icon-btn btn-delete-item" data-id="${item.id}" style="color: var(--danger);" title="Excluir">🗑️</button>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button class="action-icon-btn btn-edit-item" data-id="${item.id}" title="Editar">✏️</button>
+          <button class="action-icon-btn btn-delete-item" data-id="${item.id}" style="color: var(--danger);" title="Excluir">🗑️</button>
         </div>
       </div>
     `;
@@ -407,9 +408,7 @@ export function openCartSheet(itemId, isEditing = false) {
   const item = state.currentList.itens.find(i => i.id === itemId);
   if (!item) return;
 
-  // Preenche a quantidade com a real se já estiver no carrinho, ou com a planejada
   let initialQtd = isEditing ? (item.qtdReal || item.qtdPlanejada || 1) : (item.qtdPlanejada || 1);
-  // Preço real se já tiver, ou preço estimado como sugestão inicial
   let initialPrice = isEditing ? (item.precoReal || '') : (item.precoEstimado ? item.precoEstimado.toFixed(2) : '');
 
   modalContainer.innerHTML = `
@@ -419,14 +418,14 @@ export function openCartSheet(itemId, isEditing = false) {
         <div class="sheet-header">
           <div>
             <h3 class="sheet-title">${escapeHTML(item.nome)}</h3>
-            <span class="item-subtitle">${isEditing ? 'Ajustar no carrinho' : 'Colocar no carrinho'}</span>
+            <span class="item-subtitle" style="font-size: 0.8rem;">${isEditing ? 'Ajustar valor ou quantidade' : 'Informar preço da prateleira'}</span>
           </div>
           <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
         </div>
 
         <!-- Preço Unitário Real -->
         <div class="form-group">
-          <label class="form-label">Preço Real Unitário</label>
+          <label class="form-label">Preço Unitário (da etiqueta)</label>
           <div class="big-price-input-wrapper">
             <span class="currency-prefix">R$</span>
             <input 
@@ -440,7 +439,7 @@ export function openCartSheet(itemId, isEditing = false) {
               autofocus
             />
           </div>
-          ${item.precoEstimado > 0 ? `<span class="item-subtitle" style="display:block; margin-top:4px;">Estimado na lista: ${formatCurrency(item.precoEstimado)}</span>` : ''}
+          ${item.precoEstimado > 0 ? `<span class="item-subtitle" style="display:block; margin-top:3px; font-size: 0.75rem;">Estimado: ${formatCurrency(item.precoEstimado)}</span>` : ''}
         </div>
 
         <!-- Stepper de Quantidade -->
@@ -459,13 +458,13 @@ export function openCartSheet(itemId, isEditing = false) {
           <span class="subtotal-amount" id="sheet-subtotal-val">R$ 0,00</span>
         </div>
 
-        <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <div style="display: flex; gap: 8px; margin-top: 16px;">
           ${isEditing ? `
-            <button type="button" id="btn-return-pending" class="btn-secondary-action" style="color: var(--danger); border-color: var(--danger);">
-              Tirar do Carrinho
+            <button type="button" id="btn-return-pending" class="sheet-btn-secondary" style="color: var(--danger);">
+              Tirar
             </button>
           ` : ''}
-          <button type="button" id="btn-confirm-cart" class="btn-primary-action">
+          <button type="button" id="btn-confirm-cart" class="sheet-btn-primary">
             ✓ ${isEditing ? 'Atualizar Item' : 'Confirmar no Carrinho'}
           </button>
         </div>
@@ -571,7 +570,7 @@ export function openAddItemModal() {
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
               <label class="form-label">Quantidade</label>
               <div class="quantity-stepper">
@@ -584,13 +583,13 @@ export function openAddItemModal() {
             <div class="form-group">
               <label class="form-label">Preço Estimado</label>
               <div class="big-price-input-wrapper">
-                <span class="currency-prefix" style="font-size: 1rem; left: 10px;">R$</span>
-                <input type="number" step="0.01" inputmode="decimal" id="input-item-price-est" class="form-input" style="padding-left: 38px;" placeholder="0,00" />
+                <span class="currency-prefix" style="font-size: 0.95rem; left: 10px;">R$</span>
+                <input type="number" step="0.01" inputmode="decimal" id="input-item-price-est" class="form-input" style="padding-left: 36px;" placeholder="0,00" />
               </div>
             </div>
           </div>
 
-          <button type="submit" class="btn-primary-action" style="width: 100%; margin-top: 14px;">
+          <button type="submit" class="sheet-btn-primary" style="width: 100%; margin-top: 10px;">
             + Adicionar à Lista
           </button>
         </form>
@@ -688,26 +687,26 @@ export function openEditItemModal(itemId) {
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
-              <label class="form-label">Quantidade Planejada</label>
+              <label class="form-label">Quantidade</label>
               <input type="number" step="any" min="0.1" id="input-edit-qtd" class="form-input" value="${item.qtdPlanejada || 1}" />
             </div>
 
             <div class="form-group">
               <label class="form-label">Preço Estimado</label>
               <div class="big-price-input-wrapper">
-                <span class="currency-prefix" style="font-size: 1rem; left: 10px;">R$</span>
-                <input type="number" step="0.01" inputmode="decimal" id="input-edit-price" class="form-input" style="padding-left: 38px;" value="${item.precoEstimado || ''}" />
+                <span class="currency-prefix" style="font-size: 0.95rem; left: 10px;">R$</span>
+                <input type="number" step="0.01" inputmode="decimal" id="input-edit-price" class="form-input" style="padding-left: 36px;" value="${item.precoEstimado || ''}" />
               </div>
             </div>
           </div>
 
-          <div style="display: flex; gap: 10px; margin-top: 14px;">
-            <button type="button" id="btn-delete-current-item" class="btn-secondary-action" style="color: var(--danger); border-color: var(--danger);">
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button type="button" id="btn-delete-current-item" class="sheet-btn-secondary" style="color: var(--danger);">
               🗑️ Excluir
             </button>
-            <button type="submit" class="btn-primary-action" style="flex: 1;">
+            <button type="submit" class="sheet-btn-primary" style="flex: 1;">
               Salvar Alterações
             </button>
           </div>
@@ -774,23 +773,23 @@ export async function openListManagerModal() {
           <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
         </div>
 
-        <div class="items-group" style="margin-bottom: 20px;">
+        <div class="items-group" style="margin-bottom: 16px;">
           ${lists.map(list => `
             <div class="item-card tap-highlight ${state.currentList && state.currentList.id === list.id ? 'taken' : ''}" data-list-id="${list.id}" style="cursor: pointer;">
               <div class="item-details">
                 <span class="item-name">${escapeHTML(list.nome)}</span>
                 <span class="item-subtitle">${list.itens.length} itens cadastrados</span>
               </div>
-              ${state.currentList && state.currentList.id === list.id ? '<span class="text-success fw-bold">Ativa</span>' : ''}
+              ${state.currentList && state.currentList.id === list.id ? '<span class="text-success fw-bold" style="font-size: 0.85rem;">Ativa</span>' : ''}
             </div>
           `).join('')}
         </div>
 
-        <div style="border-top: 1px solid var(--border); padding-top: 16px;">
-          <h4 style="font-size: 1rem; margin-bottom: 10px; color: var(--text-secondary);">Criar Nova Lista</h4>
+        <div style="border-top: 1px solid var(--border); padding-top: 14px;">
+          <h4 style="font-size: 0.92rem; margin-bottom: 8px; color: var(--text-secondary);">Criar Nova Lista</h4>
           <div style="display: flex; gap: 8px;">
             <input type="text" id="input-new-list-name" class="form-input" placeholder="Ex: Churrasco de Domingo" />
-            <button id="btn-create-list" class="btn-primary-action" style="white-space: nowrap; padding: 0 18px;">
+            <button id="btn-create-list" class="sheet-btn-primary" style="white-space: nowrap; padding: 0 16px;">
               Criar
             </button>
           </div>

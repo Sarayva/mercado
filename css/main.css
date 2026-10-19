@@ -1,57 +1,56 @@
 /* ==========================================================================
-   CSS Principal - Meu Mercado PWA
-   Mobile-first, paleta refinada para visualização rápida no mercado
+   CSS Principal - Meu Mercado PWA (Mobile-First Premium)
+   Paleta escura moderna, tipografia fluida e safe-areas nativas
    ========================================================================== */
 
 :root {
-  /* Cores Principais - Tema Verde Esmeralda & Neutros Profundos */
+  /* Cores Principais - Esmeralda e Tons Profundos */
   --primary: #0d9488;
   --primary-dark: #0f766e;
   --primary-light: #14b8a6;
-  --primary-bg: #ccfbf1;
+  --primary-glow: rgba(20, 184, 166, 0.25);
   
-  --success: #22c55e;
-  --success-dark: #16a34a;
-  --success-bg: #dcfce7;
+  --success: #10b981;
+  --success-dark: #059669;
+  --success-light: #34d399;
+  --success-bg: rgba(16, 185, 129, 0.15);
   
   --warning: #f59e0b;
-  --warning-bg: #fef3c7;
+  --warning-bg: rgba(245, 158, 11, 0.15);
   
   --danger: #ef4444;
-  --danger-bg: #fee2e2;
+  --danger-bg: rgba(239, 68, 68, 0.15);
 
-  --bg: #0f172a;
-  --bg-card: #1e293b;
-  --bg-card-subtle: #273549;
-  --bg-elevated: #334155;
+  /* Superfícies e Fundos */
+  --bg: #090d16;
+  --bg-card: #131b2e;
+  --bg-card-hover: #1a253f;
+  --bg-card-taken: #0e1524;
+  --bg-elevated: #1e293b;
+  --bg-input: #0b1120;
   
+  /* Textos */
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   
-  --border: #334155;
-  --border-light: #475569;
+  /* Bordas */
+  --border: #1e293b;
+  --border-light: #334155;
+  --border-focus: #14b8a6;
 
-  /* Espaçamentos e Dimensões */
-  --header-height: 140px;
-  --bottom-bar-height: 72px;
+  /* Geometria e Dimensões */
   --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
   --radius-pill: 9999px;
-  
-  /* Sombras */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --shadow-header: 0 6px 20px rgba(0, 0, 0, 0.5);
 
-  /* Safe areas para celulares com entalhe / barra inferior do iOS e Android */
+  /* Safe areas dinâmicas */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Reset básico e tipografia */
+/* Reset e Box Model Universal */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -59,54 +58,55 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background-color: var(--bg);
   color: var(--text-primary);
-  font-size: 16px;
   line-height: 1.4;
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* Permitir seleção em campos de texto */
-input, textarea, [contenteditable="true"] {
+/* Permitir seleção apenas onde é essencial */
+input, textarea {
   user-select: text;
   -webkit-user-select: text;
 }
 
-/* Layout Geral */
+/* Layout Principal */
 #app {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
+  width: 100%;
+  max-width: 100vw;
   position: relative;
-  padding-bottom: calc(var(--bottom-bar-height) + var(--safe-bottom) + 24px);
 }
 
 /* Conteúdo Rolável */
 .main-content {
   flex: 1;
-  padding: 16px;
-  max-width: 640px;
-  margin: 0 auto;
   width: 100%;
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 12px 14px calc(var(--safe-bottom) + 90px) 14px;
 }
 
-/* Utilitários Visuais */
-.hidden {
-  display: none !important;
-}
-
+/* Utilitários */
+.hidden { display: none !important; }
 .text-success { color: var(--success); }
 .text-warning { color: var(--warning); }
 .text-danger { color: var(--danger); }
 .text-muted { color: var(--text-muted); }
-.text-primary { color: var(--primary-light); }
-
 .fw-bold { font-weight: 700; }
 .fw-semibold { font-weight: 600; }

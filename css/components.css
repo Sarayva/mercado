@@ -1,462 +1,456 @@
 /* ==========================================================================
-   Componentes de Interface - Meu Mercado PWA
-   Header ao vivo, Cards de produtos, Bottom Sheet e Toast de Desfazer
+   Componentes de Interface - Meu Mercado PWA (Mobile-First Ultra-Compacto)
+   Header Slim, Cards de Produtos Otimizados, Sheets e Toasts
    ========================================================================== */
 
-/* --- HEADER FIXO NO TOPO (TOTAL AO VIVO) --- */
+/* --- HEADER FIXO SLIM NO TOPO --- */
 .sticky-header {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(9, 13, 22, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-header);
-  padding: calc(var(--safe-top) + 12px) 16px 12px 16px;
+  padding: calc(var(--safe-top) + 8px) 14px 10px 14px;
   width: 100%;
 }
 
-.header-top-bar {
+.header-inner {
+  max-width: 580px;
+  margin: 0 auto;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.list-selector-btn {
+/* Linha 1: Seletor de Lista + Segmented Control de Modos */
+.header-top-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.list-chip-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text-primary);
-  font-size: 1.05rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  max-width: 70%;
+  max-width: 48vw;
+  min-height: 34px;
+}
+
+.list-chip-btn:active {
+  background: var(--bg-card-hover);
+}
+
+.chip-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.list-selector-btn:active {
-  background: var(--bg-card-subtle);
+.chip-arrow {
+  font-size: 0.68rem;
+  color: var(--text-muted);
 }
 
-.header-actions {
+/* Segmented Control (Tabs compactas estilo iOS) */
+.segmented-control {
   display: flex;
-  gap: 8px;
-}
-
-.icon-btn {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  color: var(--text-primary);
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
+  padding: 2px;
+  gap: 2px;
+  min-height: 34px;
+}
+
+.segmented-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.15rem;
+  gap: 5px;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
   cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
-.icon-btn:active {
-  background: var(--bg-elevated);
-  transform: scale(0.95);
+.segmented-btn.active {
+  background: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* Painel de Totais */
-.totals-dashboard {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 12px;
-  align-items: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
+/* Linha 2: Totais em Destaque */
+.header-totals-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 0 2px;
 }
 
-.total-live-box {
+.live-total-col {
   display: flex;
   flex-direction: column;
 }
 
-.total-label {
-  font-size: 0.75rem;
+.live-badge-label {
+  font-size: 0.68rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
-  font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  margin-bottom: 2px;
 }
 
-.live-indicator {
-  width: 8px;
-  height: 8px;
+.live-dot {
+  width: 7px;
+  height: 7px;
   background-color: var(--success);
   border-radius: 50%;
   display: inline-block;
-  box-shadow: 0 0 8px var(--success);
-  animation: pulse 2s infinite;
+  box-shadow: 0 0 6px var(--success);
+  animation: pulseDot 2s infinite;
 }
 
-@keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.85); }
-  100% { opacity: 1; transform: scale(1); }
+@keyframes pulseDot {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.85); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-.total-value {
-  font-size: 1.75rem;
+.live-total-number {
+  font-size: clamp(1.45rem, 6.5vw, 1.9rem);
   font-weight: 800;
-  color: var(--success);
+  color: var(--success-light);
+  line-height: 1.05;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-  margin-top: 2px;
+  letter-spacing: -0.02em;
 }
 
-.total-secondary-box {
+.summary-col {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   text-align: right;
-  gap: 2px;
+  gap: 3px;
 }
 
-.estimated-value {
-  font-size: 0.95rem;
+.summary-top-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.est-amount {
+  font-size: 0.82rem;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-.diff-badge {
-  font-size: 0.78rem;
+.diff-tag {
+  font-size: 0.7rem;
   font-weight: 700;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  border-radius: 4px;
   display: inline-block;
 }
 
-.diff-badge.saving {
-  background: rgba(34, 197, 94, 0.18);
-  color: var(--success);
+.diff-tag.saving {
+  background: var(--success-bg);
+  color: var(--success-light);
 }
 
-.diff-badge.exceeded {
-  background: rgba(239, 68, 68, 0.18);
-  color: var(--danger);
+.diff-tag.exceeded {
+  background: var(--danger-bg);
+  color: #f87171;
 }
 
-.diff-badge.neutral {
+.diff-tag.neutral {
   background: var(--bg-elevated);
   color: var(--text-muted);
 }
 
-/* Barra de Progresso de Itens */
-.progress-container {
-  margin-top: 10px;
-}
-
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
+.summary-bottom-line {
+  font-size: 0.78rem;
+  font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 5px;
 }
 
-.progress-track {
-  width: 100%;
-  height: 8px;
-  background-color: var(--bg-card);
-  border-radius: var(--radius-pill);
+/* Linha 3: Barra de Progresso Fina na borda inferior do Header */
+.header-progress-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
   overflow: hidden;
-  border: 1px solid var(--border);
 }
 
-.progress-fill {
+.header-progress-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, var(--primary), var(--success));
-  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--primary-light), var(--success));
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* --- SELETOR DE MODO (TABS) --- */
-.mode-toggle-bar {
-  display: flex;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  padding: 4px;
-  margin-bottom: 16px;
-  gap: 4px;
-}
-
-.mode-tab {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.92rem;
-  font-weight: 600;
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.mode-tab.active {
-  background: var(--primary);
-  color: #ffffff;
-  box-shadow: var(--shadow-sm);
-}
-
-/* --- LISTAS DE PRODUTOS --- */
+/* --- LISTAS DE ITENS --- */
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 20px 0 10px 0;
-  padding: 0 4px;
+  margin: 14px 0 8px 0;
+  padding: 0 2px;
 }
 
 .section-title {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.section-count {
+.section-badge {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  color: var(--text-primary);
-  font-size: 0.75rem;
-  padding: 2px 8px;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
   border-radius: var(--radius-pill);
 }
 
 .items-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* --- CARD DE ITEM --- */
 .item-card {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
-  transition: all 0.2s ease;
-  position: relative;
-  min-height: 64px;
+  padding: 10px 12px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  min-height: 58px;
+  width: 100%;
 }
 
 .item-card:active {
-  background: var(--bg-card-subtle);
-  transform: scale(0.99);
+  background: var(--bg-card-hover);
 }
 
 /* Checkbox redondo estilo mercado */
+.item-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  min-height: 38px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .item-checkbox {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
   color: transparent;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  transition: all 0.2s ease;
 }
 
 .item-card.taken .item-checkbox {
   background-color: var(--success);
   border-color: var(--success);
-  color: #042f2e;
+  color: #064e3b;
 }
 
 .item-card.taken {
-  background: rgba(30, 41, 59, 0.65);
-  border-color: rgba(51, 65, 85, 0.6);
+  background: var(--bg-card-taken);
+  border-color: rgba(30, 41, 59, 0.6);
 }
 
 .item-card.taken .item-name {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-decoration: line-through;
 }
 
+/* Informações do Item */
 .item-details {
   flex: 1;
-  min-width: 0;
+  min-width: 0; /* Essencial para truncar texto sem estourar o card */
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .item-name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 
 .item-name {
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
 }
 
 .item-category-tag {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 600;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
   background: var(--bg-elevated);
   color: var(--text-muted);
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 
 .item-subtitle {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* Preço e Subtotal */
 .item-price-info {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   text-align: right;
-  min-width: 80px;
+  min-width: 72px;
+  flex-shrink: 0;
 }
 
 .item-real-total {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--success);
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--success-light);
   font-variant-numeric: tabular-nums;
 }
 
 .item-unit-price {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
 }
 
-.item-actions-btn {
+.item-pick-hint {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--primary-light);
+}
+
+.action-icon-btn {
   background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 1.2rem;
-  padding: 6px;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+.action-icon-btn:active {
+  background: var(--bg-elevated);
 }
 
 /* Card Vazio */
 .empty-state {
   text-align: center;
-  padding: 40px 20px;
+  padding: 36px 16px;
   color: var(--text-muted);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .empty-state-icon {
-  font-size: 3rem;
-  opacity: 0.6;
+  font-size: 2.8rem;
+  opacity: 0.7;
 }
 
-/* --- BOTTOM BAR FIXA / THUMB ZONE --- */
-.bottom-bar {
+/* --- BOTÃO FLUTUANTE INFERIOR (FLOATING ACTION BUTTON) --- */
+.floating-bottom-bar {
   position: fixed;
-  bottom: 0;
+  bottom: calc(var(--safe-bottom) + 14px);
   left: 0;
   right: 0;
   z-index: 90;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid var(--border);
-  padding: 10px 16px calc(var(--safe-bottom) + 10px) 16px;
   display: flex;
   justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
 }
 
-.bottom-bar-inner {
-  max-width: 640px;
-  width: 100%;
-  display: flex;
-  gap: 12px;
-}
-
-.btn-primary-action {
-  flex: 1;
+.btn-floating-action {
+  pointer-events: auto;
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
   color: #ffffff;
   border: none;
-  border-radius: var(--radius-md);
-  padding: 14px 20px;
-  font-size: 1.05rem;
+  border-radius: var(--radius-pill);
+  padding: 12px 24px;
+  font-size: 0.98rem;
   font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.4);
-  min-height: 52px;
-}
-
-.btn-primary-action:active {
-  transform: scale(0.98);
-  filter: brightness(0.95);
-}
-
-.btn-secondary-action {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 14px 18px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   gap: 8px;
-  min-height: 52px;
+  box-shadow: 0 6px 20px rgba(13, 148, 136, 0.45);
+  min-height: 48px;
 }
 
-.btn-secondary-action:active {
-  background: var(--bg-card-subtle);
+.btn-floating-action:active {
+  transform: scale(0.97);
+  filter: brightness(0.95);
 }
 
 /* --- MODAIS & BOTTOM SHEETS --- */
@@ -466,12 +460,12 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.75);
   z-index: 200;
   display: flex;
-  align-items: flex-end; /* Mobile: bottom sheet */
+  align-items: flex-end;
   justify-content: center;
-  animation: fadeIn 0.2s ease-out;
+  animation: fadeIn 0.15s ease-out;
 }
 
 @keyframes fadeIn {
@@ -486,11 +480,11 @@
   border: 1px solid var(--border);
   border-bottom: none;
   width: 100%;
-  max-width: 640px;
-  padding: 16px 20px calc(var(--safe-bottom) + 24px) 20px;
-  box-shadow: var(--shadow-lg);
-  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  max-height: 90vh;
+  max-width: 520px;
+  padding: 12px 18px calc(var(--safe-bottom) + 18px) 18px;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
+  animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 88vh;
   overflow-y: auto;
 }
 
@@ -500,22 +494,22 @@
 }
 
 .sheet-handle {
-  width: 44px;
-  height: 5px;
+  width: 40px;
+  height: 4px;
   background: var(--border-light);
   border-radius: var(--radius-pill);
-  margin: 0 auto 16px auto;
+  margin: 0 auto 12px auto;
 }
 
 .sheet-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .sheet-title {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-primary);
 }
@@ -530,57 +524,58 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: 0.95rem;
   cursor: pointer;
 }
 
-/* Formulários rápidos dentro dos sheets */
+/* Formulários dos Sheets */
 .form-group {
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .form-label {
   display: block;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .form-input {
   width: 100%;
-  background: var(--bg);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 12px 14px;
   color: var(--text-primary);
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   outline: none;
   transition: border-color 0.2s ease;
 }
 
 .form-input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
+  box-shadow: 0 0 0 2px var(--primary-glow);
 }
 
 /* Stepper de Quantidade (- 1 +) */
 .quantity-stepper {
   display: flex;
   align-items: center;
-  background: var(--bg);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+  height: 48px;
 }
 
 .stepper-btn {
   background: var(--bg-elevated);
   border: none;
   color: var(--text-primary);
-  width: 52px;
-  height: 52px;
-  font-size: 1.5rem;
+  width: 48px;
+  height: 100%;
+  font-size: 1.4rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -597,28 +592,28 @@
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: 1.3rem;
+  font-size: 1.15rem;
   font-weight: 700;
   text-align: center;
   outline: none;
 }
 
-/* Categorias em Chips horizontais */
+/* Categorias em Chips */
 .chips-container {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
   -webkit-overflow-scrolling: touch;
 }
 
 .chip {
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: var(--radius-pill);
-  background: var(--bg);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -630,7 +625,7 @@
   border-color: var(--primary);
 }
 
-/* Preço Real em destaque */
+/* Input de Preço em Destaque */
 .big-price-input-wrapper {
   position: relative;
   display: flex;
@@ -639,48 +634,78 @@
 
 .currency-prefix {
   position: absolute;
-  left: 16px;
-  font-size: 1.25rem;
+  left: 14px;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--primary-light);
 }
 
 .big-price-input {
-  padding-left: 48px !important;
-  font-size: 1.5rem !important;
+  padding-left: 44px !important;
+  font-size: 1.35rem !important;
   font-weight: 800 !important;
-  color: var(--success) !important;
+  color: var(--success-light) !important;
 }
 
 /* Subtotal calculado do item ao vivo */
 .item-live-subtotal {
-  background: var(--bg);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 12px 16px;
-  margin-top: 10px;
+  padding: 10px 14px;
+  margin-top: 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .subtotal-calc {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
 }
 
 .subtotal-amount {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 800;
-  color: var(--success);
+  color: var(--success-light);
 }
 
-/* --- TOAST SNACKBAR COM "DESFAZER" (UNDO) --- */
+/* Botões do Sheet */
+.sheet-btn-primary {
+  flex: 1;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sheet-btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 48px;
+}
+
+/* --- TOAST SNACKBAR COM "DESFAZER" --- */
 .toast-container {
   position: fixed;
-  bottom: calc(var(--bottom-bar-height) + var(--safe-bottom) + 16px);
-  left: 16px;
-  right: 16px;
+  bottom: calc(var(--safe-bottom) + 70px);
+  left: 14px;
+  right: 14px;
   z-index: 300;
   display: flex;
   justify-content: center;
@@ -693,24 +718,24 @@
   color: #f8fafc;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  padding: 14px 18px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
-  max-width: 500px;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  max-width: 480px;
   width: 100%;
-  animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes toastIn {
-  from { transform: translateY(30px); opacity: 0; }
+  from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
 .toast-message {
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   font-weight: 500;
   flex: 1;
 }
@@ -719,15 +744,12 @@
   background: var(--warning);
   color: #0f172a;
   border: none;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-.toast-undo-btn:active {
-  filter: brightness(0.9);
+  flex-shrink: 0;
 }

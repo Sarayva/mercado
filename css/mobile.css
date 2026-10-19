@@ -1,19 +1,9 @@
 /* ==========================================================================
-   CSS Mobile & Acessibilidade para Uma Mão - Meu Mercado PWA
-   Otimizado para corredores de supermercado (alvos de toque grandes, thumb zone)
+   CSS Mobile & Acessibilidade - Meu Mercado PWA
+   Otimizações de toque, safe areas e prevenção de zoom involuntário
    ========================================================================== */
 
-/* Garantir tamanho mínimo para alvos de toque (mínimo recomendado: 48px x 48px) */
-button, 
-.item-checkbox, 
-.stepper-btn, 
-.mode-tab, 
-.chip,
-.icon-btn {
-  min-height: 44px;
-}
-
-/* Prevenção de zoom automático chato no iOS ao focar inputs */
+/* Previne zoom automático e indesejado no iOS Safari ao tocar em inputs */
 @media screen and (max-width: 768px) {
   input[type="text"],
   input[type="number"],
@@ -23,28 +13,30 @@ button,
   }
 }
 
-/* Otimização da "Thumb Zone" (região de alcance fácil do polegar) */
-.thumb-action-zone {
-  position: sticky;
-  bottom: calc(var(--safe-bottom) + 12px);
-  z-index: 80;
-  margin-top: 16px;
+/* Área de toque mínima garantida */
+button,
+.item-checkbox-wrapper,
+.stepper-btn,
+.segmented-btn,
+.chip,
+.list-chip-btn {
+  touch-action: manipulation;
 }
 
-/* Animações e transições táteis */
+/* Efeito de toque refinado */
 .tap-highlight {
-  transition: transform 0.1s ease, filter 0.1s ease;
+  transition: transform 0.08s ease, opacity 0.08s ease;
 }
 
 .tap-highlight:active {
-  transform: scale(0.97);
-  filter: brightness(0.9);
+  transform: scale(0.985);
+  opacity: 0.9;
 }
 
-/* Scroll suave e barra de rolagem estilizada */
+/* Scrollbar invisível ou sutil no mobile */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -56,21 +48,25 @@ button,
   border-radius: var(--radius-pill);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border-light);
-}
-
-/* Ajustes para telas muito pequenas (<360px de largura) */
+/* Ajustes finos para telas estreitas (<= 360px) */
 @media (max-width: 360px) {
-  .total-value {
-    font-size: 1.5rem;
+  .list-chip-btn {
+    max-width: 40vw;
+    font-size: 0.8rem;
+    padding: 4px 8px;
   }
-  .totals-dashboard {
-    grid-template-columns: 1fr;
+
+  .segmented-btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+
+  .live-total-number {
+    font-size: 1.4rem;
+  }
+
+  .item-card {
+    padding: 8px 10px;
     gap: 8px;
-  }
-  .total-secondary-box {
-    align-items: flex-start;
-    text-align: left;
   }
 }

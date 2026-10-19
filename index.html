@@ -6,7 +6,7 @@
   <title>Meu Mercado - Compras & Preços</title>
 
   <!-- PWA Meta Tags & Cores de Tema -->
-  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#090d16">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mercado">
@@ -25,75 +25,67 @@
 </head>
 <body>
   <div id="app">
-    <!-- HEADER FIXO NO TOPO (TOTAL AO VIVO & PROGRESSO) -->
+    <!-- HEADER FIXO SLIM NO TOPO -->
     <header class="sticky-header">
-      <div class="header-top-bar">
-        <button id="header-list-select-btn" class="list-selector-btn" title="Trocar ou criar lista">
-          <span>📋</span>
-          <span id="header-list-name">Carregando lista...</span>
-          <span style="font-size: 0.75rem; opacity: 0.7;">▼</span>
-        </button>
-
-        <div class="header-actions">
-          <!-- Ícone do app / status PWA -->
-          <button class="icon-btn" title="Meu Mercado" style="pointer-events: none;">
-            🛒
+      <div class="header-inner">
+        <!-- Linha 1: Lista Ativa + Seletor de Modo Compacto -->
+        <div class="header-top-row">
+          <button id="header-list-select-btn" class="list-chip-btn" title="Trocar ou criar lista">
+            <span>📋</span>
+            <span id="header-list-name" class="chip-label">Carregando...</span>
+            <span class="chip-arrow">▼</span>
           </button>
+
+          <!-- Segmented Control de Modos (Sempre visível no topo com 1 toque) -->
+          <div class="segmented-control">
+            <button id="tab-mode-comprando" class="segmented-btn active">
+              🛒 Comprando
+            </button>
+            <button id="tab-mode-planejando" class="segmented-btn">
+              📝 Lista
+            </button>
+          </div>
+        </div>
+
+        <!-- Linha 2: Dashboard Slim de Totais -->
+        <div class="header-totals-row">
+          <div class="live-total-col">
+            <span class="live-badge-label">
+              <span class="live-dot"></span> NO CARRINHO
+            </span>
+            <div class="live-total-number" id="header-total-live">R$ 0,00</div>
+          </div>
+
+          <div class="summary-col">
+            <div class="summary-top-line">
+              <span id="header-estimated-value" class="est-amount">Est: R$ 0,00</span>
+              <span id="header-diff-badge" class="diff-tag neutral">Estimativa</span>
+            </div>
+            <div class="summary-bottom-line">
+              <span id="header-progress-text">0 de 0 pegos (0%)</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Dashboard de Totais (Sempre Calculado Automaticamente) -->
-      <div class="totals-dashboard">
-        <div class="total-live-box">
-          <span class="total-label">
-            <span class="live-indicator"></span> Total Carrinho
-          </span>
-          <div class="total-value" id="header-total-live">R$ 0,00</div>
-        </div>
-
-        <div class="total-secondary-box">
-          <div class="estimated-value" id="header-estimated-value">Est: R$ 0,00</div>
-          <span class="diff-badge neutral" id="header-diff-badge">Estimativa total</span>
-        </div>
-      </div>
-
-      <!-- Barra de Progresso de Itens Pegos vs Faltando -->
-      <div class="progress-container">
-        <div class="progress-info">
-          <span>Progresso da compra</span>
-          <span id="header-progress-text">0 de 0 itens (0%)</span>
-        </div>
-        <div class="progress-track">
-          <div class="progress-fill" id="header-progress-fill"></div>
-        </div>
+      <!-- Linha 3: Barra de Progresso Fina na borda inferior do Header -->
+      <div class="header-progress-track">
+        <div class="header-progress-fill" id="header-progress-fill"></div>
       </div>
     </header>
 
-    <!-- CONTEÚDO PRINCIPAL -->
+    <!-- CONTEÚDO PRINCIPAL (LISTA DE PRODUTOS) -->
     <main class="main-content">
-      <!-- Alternador de Modos (Comprando no Corredor vs Planejando Lista) -->
-      <div class="mode-toggle-bar">
-        <button id="tab-mode-comprando" class="mode-tab active">
-          🛒 Comprando
-        </button>
-        <button id="tab-mode-planejando" class="mode-tab">
-          📝 Planejar Lista
-        </button>
-      </div>
-
-      <!-- Lista de Itens (Gerenciada dinamicamente via JS) -->
       <div id="list-content-container"></div>
     </main>
 
-    <!-- BARRA INFERIOR FIXA (ZONA DO POLEGAR / THUMB ZONE) -->
-    <nav class="bottom-bar">
-      <div class="bottom-bar-inner">
-        <button id="btn-add-item-bottom" class="btn-primary-action">
-          <span style="font-size: 1.3rem; line-height: 1;">+</span>
-          <span>Adicionar Item</span>
-        </button>
-      </div>
-    </nav>
+    <!-- BOTÃO FLUTUANTE INFERIOR (FAB) -->
+    <div class="floating-bottom-bar">
+      <button id="btn-add-item-bottom" class="btn-floating-action">
+        <span style="font-size: 1.25rem; line-height: 1;">+</span>
+        <span>Novo Item</span>
+      </button>
+    </div>
 
     <!-- CONTAINER DE NOTIFICAÇÕES (TOAST COM "DESFAZER") -->
     <div id="toast-container" class="toast-container"></div>

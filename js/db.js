@@ -32,11 +32,24 @@ function notifyLocalChange() {
 export function initDB() {
   return new Promise((resolve, reject) => {
     if (dbInstance) {
+      console.log('[DB] dbInstance já existe, retornando cache.');
       resolve(dbInstance);
       return;
     }
 
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    console.log('[DB] Chamando indexedDB.open...', DB_NAME, DB_VERSION);
+    let request;
+    try {
+      request = indexedDB.open(DB_NAME, DB_VERSION);
+    } catch (e) {
+      console.error('[DB] Exceção síncrona em indexedDB.open:', e);
+      reject(e);
+      return;
+    }
+
+    request.onblocked = (event) => {
+      console.warn('[DB] indexedDB.open BLOQUEADO por outra conexão:', event);
+    };
 
     request.onerror = (event) => {
       console.error('[DB] Erro ao abrir IndexedDB:', event.target.error);
@@ -44,45 +57,68 @@ export function initDB() {
     };
 
     request.onsuccess = (event) => {
+      console.log('[DB] indexedDB.open SUCESSO!');
       dbInstance = event.target.result;
+      dbInstance.onversionchange = () => {
+        console.warn('[DB] Nova versão detectada em outra aba, fechando banco.');
+        if (dbInstance) {
+          dbInstance.close();
+          dbInstance = null;
+        }
+      };
       resolve(dbInstance);
     };
 
     request.onupgradeneeded = (event) => {
-      const db = event.target.result;
+      console.log('[DB] indexedDB.open UPGRADENEEDED (de', event.oldVersion, 'para', event.newVersion, ')');
+      try {
+        const db = event.target.result;
 
-      // 1. Store para Listas de Compras
-      if (!db.objectStoreNames.contains('listas')) {
-        const listasStore = db.createObjectStore('listas', { keyPath: 'id' });
-        listasStore.createIndex('dataCriacao', 'dataCriacao', { unique: false });
-        listasStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-      }
+        // 1. Store para Listas de Compras
+        if (!db.objectStoreNames.contains('listas')) {
+          const listasStore = db.createObjectStore('listas', { keyPath: 'id' });
+          listasStore.createIndex('dataCriacao', 'dataCriacao', { unique: false });
+          listasStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
 
-      // 2. Store para Histórico de Preços (Fases 2 e 3)
-      if (!db.objectStoreNames.contains('precos')) {
-        const precosStore = db.createObjectStore('precos', { keyPath: 'id' });
-        precosStore.createIndex('itemId', 'itemId', { unique: false });
-        precosStore.createIndex('data', 'data', { unique: false });
-        precosStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-      }
+        // 2. Store para Histórico de Preços (Fases 2 e 3)
+        if (!db.objectStoreNames.contains('precos')) {
+          const precosStore = db.createObjectStore('precos', { keyPath: 'id' });
+          precosStore.createIndex('itemId', 'itemId', { unique: false });
+          precosStore.createIndex('data', 'data', { unique: false });
+          precosStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
 
-      // 3. Store para Notas Fiscais (Fase 4 & Sincronização)
-      if (!db.objectStoreNames.contains('notas')) {
-        const notasStore = db.createObjectStore('notas', { keyPath: 'id' });
-        notasStore.createIndex('data', 'data', { unique: false });
-        notasStore.createIndex('status', 'status', { unique: false });
-        notasStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-      }
+        // 3. Store para Notas Fiscais (Fase 4 & Sincronização)
+        if (!db.objectStoreNames.contains('notas')) {
+          const notasStore = db.createObjectStore('notas', { keyPath: 'id' });
+          notasStore.createIndex('data', 'data', { unique: false });
+          notasStore.createIndex('status', 'status', { unique: false });
+          notasStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
 
-      // 4. Store de Configurações gerais (lista ativa, sincronização, credenciais)
-      if (!db.objectStoreNames.contains('config')) {
-        db.createObjectStore('config', { keyPath: 'chave' });
-      }
+        // 4. Store de Configurações gerais (lista ativa, sincronização, credenciais)
+        if (!db.objectStoreNames.contains('config')) {
+          db.createObjectStore('config', { keyPath: 'chave' });
+        }
 
-      // 5. Fila de Sincronização Offline -> Firestore
-      if (!db.objectStoreNames.contains('sync_queue')) {
-        const queueStore = db.createObjectStore('sync_queue', { keyPath: 'id' });
-        queueStore.createIndex('timestamp', 'timestamp', { unique: false });
+        // 5. Fila de Sincronização Offline -> Firestore
+        if (!db.objectStoreNames.contains('sync_queue')) {
+          const queueStore = db.createObjectStore('sync_queue', { keyPath: 'id' });
+          queueStore.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+
+        console.log('[DB] Stores configurados com sucesso no onupgradeneeded.');
+        if (event.target.transaction) {
+          event.target.transaction.oncomplete = () => {
+            console.log('[DB] Transaction de upgrade concluída!');
+          };
+          event.target.transaction.onerror = (txErr) => {
+            console.error('[DB] Erro na transaction de upgrade:', txErr);
+          };
+        }
+      } catch (upErr) {
+        console.error('[DB] Exceção dentro de onupgradeneeded:', upErr);
       }
     };
   });

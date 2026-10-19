@@ -39,58 +39,84 @@ function registerServiceWorker() {
  * Inicialização do App
  */
 async function bootstrap() {
-  console.log('[App] Inicializando Meu Mercado PWA...');
-
-  // 1. Inicializa o banco local IndexedDB
-  await initDB();
-
-  // 2. Popula dados históricos de demonstração se o histórico for novo (Fase 3)
+  console.log('[App] 1. Inicializando Meu Mercado PWA...');
   try {
-    await seedInitialPriceHistoryIfEmpty();
-  } catch (seedErr) {
-    console.warn('[App] Erro ao verificar sementes históricas:', seedErr);
-  }
+    // 1. Inicializa o banco local IndexedDB
+    console.log('[App] 2. Chamando initDB()...');
+    await initDB();
+    console.log('[App] 3. initDB() concluído com sucesso.');
 
-  // 3. Busca lista ativa ou cria uma inicial de demonstração
-  const savedActiveListId = await getConfig('activeListId');
-  let activeList = null;
+    // 2. Popula dados históricos de demonstração se o histórico for novo (Fase 3)
+    try {
+      console.log('[App] 4. Semeando histórico se necessário...');
+      await seedInitialPriceHistoryIfEmpty();
+      console.log('[App] 5. Semeamento verificado.');
+    } catch (seedErr) {
+      console.warn('[App] Erro ao verificar sementes históricas:', seedErr);
+    }
 
-  if (savedActiveListId) {
-    activeList = await getListById(savedActiveListId);
-  }
+    // 3. Busca lista ativa ou cria uma inicial de demonstração
+    console.log('[App] 6. Obtendo lista ativa...');
+    let savedActiveListId = null;
+    try {
+      savedActiveListId = await getConfig('activeListId');
+    } catch (e) {
+      console.warn('[App] Erro ao ler activeListId:', e);
+    }
 
-  if (!activeList) {
-    activeList = await createDefaultListIfEmpty();
-  }
+    let activeList = null;
+    if (savedActiveListId) {
+      try {
+        activeList = await getListById(savedActiveListId);
+      } catch (e) {
+        console.warn('[App] Erro ao buscar lista ativa:', e);
+      }
+    }
 
-  setCurrentList(activeList);
+    if (!activeList) {
+      console.log('[App] 7. Criando lista padrão...');
+      activeList = await createDefaultListIfEmpty();
+    }
 
-  // 4. Inscreve a UI para renderizar sempre que o estado mudar
-  subscribe(() => {
-    renderUI();
-  });
+    console.log('[App] 8. Definindo lista ativa no estado:', activeList ? activeList.nome : 'null');
+    setCurrentList(activeList);
 
-  // Exponibiliza renderActiveList para sincronizações remotas em segundo plano
-  window.renderActiveList = () => renderUI();
-
-  // Render inicial
-  renderUI();
-
-  // 5. Configura ouvintes de eventos da barra superior e botões fixos
-  setupEventListeners();
-
-  // 6. Registra o Service Worker PWA
-  registerServiceWorker();
-
-  // 7. Inicializa o Firebase e o motor de sincronização em segundo plano
-  try {
-    await initFirebase();
-    onSyncStatusChange((payload) => {
-      renderSyncBadge(payload);
+    // 4. Inscreve a UI para renderizar sempre que o estado mudar
+    subscribe(() => {
+      renderUI();
     });
-    await initSync();
-  } catch (syncErr) {
-    console.warn('[App] Sincronização em segundo plano iniciará quando possível:', syncErr);
+
+    // Exponibiliza renderActiveList para sincronizações remotas em segundo plano
+    window.renderActiveList = () => renderUI();
+
+    // Render inicial
+    console.log('[App] 9. Chamando renderUI()...');
+    renderUI();
+    console.log('[App] 10. renderUI() finalizado com sucesso!');
+
+    // 5. Configura ouvintes de eventos da barra superior e botões fixos
+    setupEventListeners();
+
+    // 6. Registra o Service Worker PWA
+    registerServiceWorker();
+
+    // 7. Inicializa o Firebase e o motor de sincronização em segundo plano
+    try {
+      await initFirebase();
+      onSyncStatusChange((payload) => {
+        renderSyncBadge(payload);
+      });
+      await initSync();
+    } catch (syncErr) {
+      console.warn('[App] Sincronização em segundo plano iniciará quando possível:', syncErr);
+    }
+  } catch (fatalErr) {
+    console.error('[App] ERRO FATAL no bootstrap:', fatalErr);
+    const errEl = document.getElementById('debug-fatal-error') || document.createElement('div');
+    errEl.id = 'debug-fatal-error';
+    errEl.style = 'color:#ff4d4f;background:#1e1014;padding:12px;border:1px solid #ff4d4f;margin:10px;border-radius:8px;font-family:monospace;font-size:12px;z-index:99999;';
+    errEl.textContent = 'BOOTSTRAP ERROR: ' + (fatalErr.message || fatalErr);
+    document.body.prepend(errEl);
   }
 }
 

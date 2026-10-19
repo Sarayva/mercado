@@ -1574,12 +1574,6 @@ export async function openReplenishmentModal() {
   });
 }
 
-  btnClose.addEventListener('click', closeModal);
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal();
-  });
-}
-
 /**
  * Inicia o fluxo de captura de foto da etiqueta e extração por IA (Fase 2)
  */

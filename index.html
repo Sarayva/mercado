@@ -20,6 +20,30 @@
 
   <!-- Estilos Unificados (Carga instantânea em 1 requisição) -->
   <link rel="stylesheet" href="./css/style.css">
+  <script>
+    window.addEventListener('error', function(e) {
+      console.error('[GlobalError]', e);
+      var errEl = document.getElementById('debug-fatal-error');
+      if (!errEl) {
+        errEl = document.createElement('div');
+        errEl.id = 'debug-fatal-error';
+        errEl.style = 'color:#ff4d4f;background:#1e1014;padding:12px;border:1px solid #ff4d4f;margin:10px;border-radius:8px;font-family:monospace;font-size:12px;z-index:99999;position:relative;word-break:break-all;';
+        document.body.prepend(errEl);
+      }
+      errEl.textContent = 'ERRO: ' + (e.message || e.error || 'Erro desconhecido') + ' (' + (e.filename || '') + ':' + (e.lineno || '') + ')';
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error('[UnhandledRejection]', e);
+      var errEl = document.getElementById('debug-fatal-error');
+      if (!errEl) {
+        errEl = document.createElement('div');
+        errEl.id = 'debug-fatal-error';
+        errEl.style = 'color:#ff4d4f;background:#1e1014;padding:12px;border:1px solid #ff4d4f;margin:10px;border-radius:8px;font-family:monospace;font-size:12px;z-index:99999;position:relative;word-break:break-all;';
+        document.body.prepend(errEl);
+      }
+      errEl.textContent = 'PROMISE ERROR: ' + (e.reason ? (e.reason.message || e.reason) : 'Rejeição sem motivo');
+    });
+  </script>
 </head>
 <body>
   <div id="app">
@@ -72,6 +96,9 @@
                 <span id="sync-status-text">offline</span>
               </button>
             </div>
+          </div>
+        </div>
+
         <!-- Linha 2.5: Barra de Teto de Gastos / Orçamento e Saldo Restante -->
         <div class="header-budget-row" id="header-budget-row">
           <div class="budget-pill-interactive" id="header-budget-trigger" title="Toque para definir ou alterar o teto de gastos">

@@ -203,18 +203,38 @@ export async function updateItem(itemId, updatedData) {
 /**
  * Marca um item como pego no carrinho com quantidade e preço real
  */
-export async function markItemAsTaken(itemId, qtdReal, precoReal) {
+export async function markItemAsTaken(itemId, qtdReal, precoReal, mercado = 'Mercado Geral') {
   const index = state.currentList.itens.findIndex(i => i.id === itemId);
   if (index === -1) return;
 
   const previousState = { ...state.currentList.itens[index] };
+  const item = state.currentList.itens[index];
 
-  state.currentList.itens[index].pego = true;
-  state.currentList.itens[index].qtdReal = Number(qtdReal) || 1;
-  state.currentList.itens[index].precoReal = Number(precoReal) || 0;
-  state.currentList.itens[index].dataPego = new Date().toISOString();
+  item.pego = true;
+  item.qtdReal = Number(qtdReal) || 1;
+  item.precoReal = Number(precoReal) || 0;
+  item.dataPego = new Date().toISOString();
+  item.mercado = mercado || item.mercado || 'Mercado Geral';
 
   await persistCurrentList();
+
+  // Alimenta automaticamente o histórico de preços
+  if (item.precoReal > 0) {
+    try {
+      await savePreco({
+        itemId: item.id,
+        nomeItem: item.nome,
+        categoria: item.categoria || 'Geral',
+        valor: item.precoReal,
+        quantidade: item.qtdReal,
+        data: item.dataPego,
+        mercado: item.mercado,
+        origem: 'carrinho'
+      });
+    } catch (precoErr) {
+      console.warn('[State] Não foi possível salvar histórico de preço:', precoErr);
+    }
+  }
 
   registerUndo(`Item "${previousState.nome}" tirado do carrinho`, async () => {
     const idx = state.currentList.itens.findIndex(i => i.id === itemId);

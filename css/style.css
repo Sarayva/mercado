@@ -1056,3 +1056,213 @@ button,
   }
 }
 
+/* ==========================================================================
+   FASE 3: HISTÓRICO DE PREÇOS, COMPARADOR DE MERCADOS & SUGESTÕES
+   ========================================================================== */
+
+.header-icon-action-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  outline: none;
+}
+.header-icon-action-btn:active {
+  transform: scale(0.92);
+  background: var(--bg-elevated);
+}
+
+/* Pílula de Sugestão de Preço Inteligente ao Cadastrar/Editar Item */
+.price-suggestion-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin-top: 8px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  animation: fadeIn 0.2s ease-out;
+}
+.price-suggestion-pill strong {
+  color: var(--success);
+}
+.btn-use-suggested-price {
+  background: var(--success);
+  color: #042f2e;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.1s ease;
+}
+.btn-use-suggested-price:active {
+  transform: scale(0.93);
+}
+
+/* Grid de Estatísticas (Menor / Maior / Último / Média) */
+.price-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.price-stat-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.price-stat-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.price-stat-val {
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.price-stat-val.best {
+  color: var(--success);
+}
+.price-stat-val.high {
+  color: #f87171;
+}
+.price-stat-val.latest {
+  color: #38bdf8;
+}
+.price-stat-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Comparador entre Mercados */
+.market-compare-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  transition: border-color 0.2s ease;
+}
+.market-compare-card.is-best {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.06);
+}
+.market-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.market-name-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.market-badge-best {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--success);
+  color: #042f2e;
+  text-transform: uppercase;
+}
+.market-price-details {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.market-price-val {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.market-compare-card.is-best .market-price-val {
+  color: var(--success);
+}
+
+/* Lista de Compras Passadas */
+.history-record-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+}
+.history-thumb-btn {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  margin-right: 10px;
+}
+.history-thumb-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.catalog-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.catalog-item-card:active {
+  transform: scale(0.98);
+  background: var(--bg-card-hover);
+}
+
+

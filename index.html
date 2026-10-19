@@ -34,14 +34,20 @@
             <span class="chip-arrow">▼</span>
           </button>
 
-          <!-- Segmented Control de Modos (Sempre visível no topo com 1 toque) -->
-          <div class="segmented-control">
-            <button id="tab-mode-comprando" class="segmented-btn active">
-              🛒 Comprando
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button id="btn-header-history" class="header-icon-action-btn" title="Histórico de Preços e Comparador" type="button">
+              <span>📊</span>
             </button>
-            <button id="tab-mode-planejando" class="segmented-btn">
-              📝 Lista
-            </button>
+
+            <!-- Segmented Control de Modos (Sempre visível no topo com 1 toque) -->
+            <div class="segmented-control">
+              <button id="tab-mode-comprando" class="segmented-btn active">
+                🛒 Comprando
+              </button>
+              <button id="tab-mode-planejando" class="segmented-btn">
+                📝 Lista
+              </button>
+            </div>
           </div>
         </div>
 

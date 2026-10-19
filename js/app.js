@@ -5,9 +5,18 @@
 
 import { initDB, createDefaultListIfEmpty, getConfig, getListById } from './db.js';
 import { state, setCurrentList, setMode, subscribe } from './state.js';
-import { renderUI, openAddItemModal, openListManagerModal, handleCameraScan, renderSyncBadge, openSyncModal } from './ui.js';
+import {
+  renderUI,
+  openAddItemModal,
+  openListManagerModal,
+  handleCameraScan,
+  renderSyncBadge,
+  openSyncModal,
+  openPriceHistoryCatalogModal
+} from './ui.js';
 import { initFirebase } from './firebase-config.js';
 import { initSync, onSyncStatusChange } from './sync.js';
+import { seedInitialPriceHistoryIfEmpty } from './prices.js';
 
 /**
  * Registra o Service Worker para habilitar o PWA e suporte offline
@@ -35,7 +44,14 @@ async function bootstrap() {
   // 1. Inicializa o banco local IndexedDB
   await initDB();
 
-  // 2. Busca lista ativa ou cria uma inicial de demonstração
+  // 2. Popula dados históricos de demonstração se o histórico for novo (Fase 3)
+  try {
+    await seedInitialPriceHistoryIfEmpty();
+  } catch (seedErr) {
+    console.warn('[App] Erro ao verificar sementes históricas:', seedErr);
+  }
+
+  // 3. Busca lista ativa ou cria uma inicial de demonstração
   const savedActiveListId = await getConfig('activeListId');
   let activeList = null;
 
@@ -49,7 +65,7 @@ async function bootstrap() {
 
   setCurrentList(activeList);
 
-  // 3. Inscreve a UI para renderizar sempre que o estado mudar
+  // 4. Inscreve a UI para renderizar sempre que o estado mudar
   subscribe(() => {
     renderUI();
   });
@@ -60,13 +76,13 @@ async function bootstrap() {
   // Render inicial
   renderUI();
 
-  // 4. Configura ouvintes de eventos da barra superior e botões fixos
+  // 5. Configura ouvintes de eventos da barra superior e botões fixos
   setupEventListeners();
 
-  // 5. Registra o Service Worker PWA
+  // 6. Registra o Service Worker PWA
   registerServiceWorker();
 
-  // 6. Inicializa o Firebase e o motor de sincronização em segundo plano
+  // 7. Inicializa o Firebase e o motor de sincronização em segundo plano
   try {
     await initFirebase();
     onSyncStatusChange((payload) => {
@@ -82,6 +98,14 @@ async function bootstrap() {
  * Configura os ouvintes de clique globais
  */
 function setupEventListeners() {
+  // Botão do Histórico de Preços & Comparador no Header (Fase 3)
+  const btnHistory = document.getElementById('btn-header-history');
+  if (btnHistory) {
+    btnHistory.addEventListener('click', () => {
+      openPriceHistoryCatalogModal();
+    });
+  }
+
   // Badge de status de sincronização no header
   const btnSync = document.getElementById('sync-status-btn');
   if (btnSync) {

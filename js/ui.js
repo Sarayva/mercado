@@ -23,6 +23,13 @@ import { capturePriceTagPhoto } from './camera.js';
 import { analyzePriceTag } from './vision.js';
 import { getSyncStatus, triggerSync, onSyncStatusChange } from './sync.js';
 import { saveActiveFirebaseConfig, getActiveFirebaseConfig, isFirestoreActive } from './firebase-config.js';
+import {
+  getProductPriceStats,
+  getAllTrackedProducts,
+  getKnownSupermarkets,
+  renderPriceTrendSVG,
+  removePriceRecord
+} from './prices.js';
 
 // Utilitário para formatar moeda Real (BRL)
 export function formatCurrency(value) {
@@ -240,7 +247,8 @@ function renderShoppingMode(container) {
             </div>
             <span class="item-subtitle">${qtdText}${precoEstText}</span>
           </div>
-          <div class="item-price-info">
+          <div class="item-price-info" style="display: flex; align-items: center; gap: 6px;">
+            <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
             <span class="item-pick-hint">Pegar ➔</span>
           </div>
         </div>
@@ -280,11 +288,14 @@ function renderShoppingMode(container) {
             <div class="item-name-row">
               <span class="item-name">${escapeHTML(item.nome)}</span>
             </div>
-            <span class="item-subtitle">${detalhesPreco}</span>
+            <span class="item-subtitle">${detalhesPreco} • ${escapeHTML(item.mercado || 'Mercado Geral')}</span>
           </div>
-          <div class="item-price-info">
-            <span class="item-real-total">${formatCurrency(subtotal)}</span>
-            <span class="item-unit-price">${formatCurrency(item.precoReal)}/un</span>
+          <div class="item-price-info" style="display: flex; align-items: center; gap: 6px;">
+            <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
+            <div style="text-align: right;">
+              <span class="item-real-total">${formatCurrency(subtotal)}</span>
+              <span class="item-unit-price">${formatCurrency(item.precoReal)}/un</span>
+            </div>
           </div>
         </div>
       `;
@@ -298,6 +309,7 @@ function renderShoppingMode(container) {
   // Ouvintes de clique nos cards do modo Comprando
   container.querySelectorAll('.item-card').forEach(card => {
     card.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-history-direct')) return;
       const itemId = card.dataset.itemId;
       const action = card.dataset.action;
       const isCheckbox = e.target.closest('[data-checkbox="true"]');
@@ -314,6 +326,15 @@ function renderShoppingMode(container) {
           openCartSheet(itemId, true);
         }
       }
+    });
+  });
+
+  // Ouvintes de histórico direto nos cards
+  container.querySelectorAll('.btn-history-direct').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerHaptic();
+      openProductHistoryModal(btn.dataset.name);
     });
   });
 
@@ -362,6 +383,7 @@ function renderPlanningMode(container) {
           <span class="item-subtitle">${qtdText} • ${precoText}</span>
         </div>
         <div style="display: flex; gap: 4px; align-items: center;">
+          <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Histórico de Preços">📊</button>
           <button class="action-icon-btn btn-edit-item" data-id="${item.id}" title="Editar">✏️</button>
           <button class="action-icon-btn btn-delete-item" data-id="${item.id}" style="color: var(--danger);" title="Excluir">🗑️</button>
         </div>
@@ -371,6 +393,15 @@ function renderPlanningMode(container) {
 
   html += `</div>`;
   container.innerHTML = html;
+
+  // Ouvintes de histórico direto
+  container.querySelectorAll('.btn-history-direct').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerHaptic();
+      openProductHistoryModal(btn.dataset.name);
+    });
+  });
 
   // Ouvintes de edição e remoção
   container.querySelectorAll('.btn-edit-item').forEach(btn => {
@@ -407,14 +438,34 @@ export function closeModal() {
 }
 
 /**
- * Bottom Sheet: Modo Comprando - Pegar item e informar preço/qtd real
+ * Bottom Sheet: Modo Comprando - Pegar item e informar preço/qtd real e mercado
  */
-export function openCartSheet(itemId, isEditing = false) {
+export async function openCartSheet(itemId, isEditing = false) {
   const item = state.currentList.itens.find(i => i.id === itemId);
   if (!item) return;
 
   let initialQtd = isEditing ? (item.qtdReal || item.qtdPlanejada || 1) : (item.qtdPlanejada || 1);
   let initialPrice = isEditing ? (item.precoReal || '') : (item.precoEstimado ? item.precoEstimado.toFixed(2) : '');
+
+  // Busca dados de histórico de preços para conferência na gôndola
+  const stats = await getProductPriceStats(item.nome);
+  const knownMarkets = await getKnownSupermarkets();
+  const currentMarket = item.mercado || window.lastUsedSupermarket || (knownMarkets[0] || 'Mercado Geral');
+
+  let historyBannerHtml = '';
+  if (stats && stats.totalCompras > 0) {
+    historyBannerHtml = `
+      <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: var(--radius-sm); padding: 8px 10px; margin-top: 6px; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 0.74rem; color: var(--text-secondary);">
+          Menor: <strong style="color: var(--success);">${formatCurrency(stats.menorPreco)}</strong> (${escapeHTML(stats.menorMercado)})
+          • Último: <strong>${formatCurrency(stats.ultimoPreco)}</strong>
+        </span>
+        <button type="button" id="btn-cart-view-history" style="background: transparent; border: none; color: var(--primary-light); font-size: 0.75rem; font-weight: 700; cursor: pointer; padding: 2px 4px;">
+          Ver 📊
+        </button>
+      </div>
+    `;
+  }
 
   modalContainer.innerHTML = `
     <div class="modal-overlay" id="sheet-overlay">
@@ -444,7 +495,25 @@ export function openCartSheet(itemId, isEditing = false) {
               autofocus
             />
           </div>
-          ${item.precoEstimado > 0 ? `<span class="item-subtitle" style="display:block; margin-top:3px; font-size: 0.75rem;">Estimado: ${formatCurrency(item.precoEstimado)}</span>` : ''}
+          ${item.precoEstimado > 0 ? `<span class="item-subtitle" style="display:block; margin-top:3px; font-size: 0.75rem;">Estimado na lista: ${formatCurrency(item.precoEstimado)}</span>` : ''}
+          ${historyBannerHtml}
+        </div>
+
+        <!-- Supermercado -->
+        <div class="form-group">
+          <label class="form-label">Supermercado</label>
+          <input 
+            type="text" 
+            id="sheet-item-mercado" 
+            list="cart-supermarket-datalist" 
+            class="form-input" 
+            style="font-size: 0.92rem; padding: 10px 14px;" 
+            placeholder="Ex: Assaí, Carrefour, Pão de Açúcar..." 
+            value="${escapeHTML(currentMarket)}" 
+          />
+          <datalist id="cart-supermarket-datalist">
+            ${knownMarkets.map(m => `<option value="${escapeHTML(m)}"></option>`).join('')}
+          </datalist>
         </div>
 
         <!-- Stepper de Quantidade -->
@@ -479,6 +548,7 @@ export function openCartSheet(itemId, isEditing = false) {
 
   const inputPreco = document.getElementById('sheet-preco-real');
   const inputQtd = document.getElementById('sheet-qtd-real');
+  const inputMercado = document.getElementById('sheet-item-mercado');
   const subtotalCalc = document.getElementById('sheet-subtotal-calc');
   const subtotalVal = document.getElementById('sheet-subtotal-val');
   const btnMinus = document.getElementById('btn-qtd-minus');
@@ -487,6 +557,13 @@ export function openCartSheet(itemId, isEditing = false) {
   const btnClose = document.getElementById('btn-close-sheet');
   const overlay = document.getElementById('sheet-overlay');
   const btnReturn = document.getElementById('btn-return-pending');
+  const btnViewHistory = document.getElementById('btn-cart-view-history');
+
+  if (btnViewHistory) {
+    btnViewHistory.addEventListener('click', () => {
+      openProductHistoryModal(item.nome);
+    });
+  }
 
   function updateSheetSubtotal() {
     const p = parseFloat(inputPreco.value) || 0;
@@ -523,8 +600,11 @@ export function openCartSheet(itemId, isEditing = false) {
     triggerHaptic();
     const preco = parseFloat(inputPreco.value) || 0;
     const qtd = parseFloat(inputQtd.value) || 1;
+    const mercado = (inputMercado ? inputMercado.value.trim() : '') || 'Mercado Geral';
 
-    await markItemAsTaken(itemId, qtd, preco);
+    window.lastUsedSupermarket = mercado;
+
+    await markItemAsTaken(itemId, qtd, preco, mercado);
     closeModal();
     showToast(`"${item.nome}" colocado no carrinho!`);
   });
@@ -545,11 +625,13 @@ export function openCartSheet(itemId, isEditing = false) {
 }
 
 /**
- * Modal: Adicionar Novo Item à Lista
+ * Modal: Adicionar Novo Item à Lista (com sugestão de preço baseada em compras passadas)
  */
-export function openAddItemModal() {
+export async function openAddItemModal() {
   const categories = ['Geral', 'Mercearia', 'Hortifruti', 'Carnes', 'Laticínios', 'Bebidas', 'Limpeza', 'Higiene', 'Padaria'];
   let selectedCategory = 'Geral';
+
+  const trackedProducts = await getAllTrackedProducts();
 
   modalContainer.innerHTML = `
     <div class="modal-overlay" id="sheet-overlay">
@@ -561,10 +643,25 @@ export function openAddItemModal() {
         </div>
 
         <form id="form-add-item">
-          <div class="form-group">
+          <div class="form-group" style="margin-bottom: 6px;">
             <label class="form-label">Nome do Produto *</label>
-            <input type="text" id="input-item-name" class="form-input" placeholder="Ex: Café em Pó 500g" required autofocus />
+            <input 
+              type="text" 
+              id="input-item-name" 
+              list="datalist-tracked-products" 
+              class="form-input" 
+              placeholder="Ex: Café em Pó 500g" 
+              required 
+              autofocus 
+              autocomplete="off"
+            />
+            <datalist id="datalist-tracked-products">
+              ${trackedProducts.map(p => `<option value="${escapeHTML(p.nome)}"></option>`).join('')}
+            </datalist>
           </div>
+
+          <!-- Container de sugestão automática de preço -->
+          <div id="add-item-price-suggestion-container"></div>
 
           <div class="form-group">
             <label class="form-label">Categoria</label>
@@ -606,11 +703,44 @@ export function openAddItemModal() {
   const inputName = document.getElementById('input-item-name');
   const inputQtd = document.getElementById('input-item-qtd');
   const inputPrice = document.getElementById('input-item-price-est');
+  const suggestionContainer = document.getElementById('add-item-price-suggestion-container');
   const chips = document.querySelectorAll('#category-chips .chip');
   const btnMinus = document.getElementById('btn-add-minus');
   const btnPlus = document.getElementById('btn-add-plus');
   const btnClose = document.getElementById('btn-close-sheet');
   const overlay = document.getElementById('sheet-overlay');
+
+  // Sugestão em tempo real ao digitar o nome do produto
+  let debounceSuggestTimer = null;
+  inputName.addEventListener('input', () => {
+    if (debounceSuggestTimer) clearTimeout(debounceSuggestTimer);
+    debounceSuggestTimer = setTimeout(async () => {
+      const query = inputName.value.trim();
+      if (query.length >= 2) {
+        const stats = await getProductPriceStats(query);
+        if (stats && stats.ultimoPreco > 0) {
+          suggestionContainer.innerHTML = `
+            <div class="price-suggestion-pill">
+              <span>💡 Último pago: <strong>${formatCurrency(stats.ultimoPreco)}</strong> (${escapeHTML(stats.ultimoMercado)})</span>
+              <button type="button" class="btn-use-suggested-price" id="btn-apply-suggested-price">Usar Preço</button>
+            </div>
+          `;
+          const btnApply = document.getElementById('btn-apply-suggested-price');
+          if (btnApply) {
+            btnApply.addEventListener('click', () => {
+              triggerHaptic();
+              inputPrice.value = stats.ultimoPreco.toFixed(2);
+              showToast(`Preço sugerido ${formatCurrency(stats.ultimoPreco)} aplicado!`);
+            });
+          }
+        } else {
+          suggestionContainer.innerHTML = '';
+        }
+      } else {
+        suggestionContainer.innerHTML = '';
+      }
+    }, 150);
+  });
 
   chips.forEach(chip => {
     chip.addEventListener('click', () => {
@@ -661,12 +791,14 @@ export function openAddItemModal() {
 /**
  * Modal: Editar Item Planejado
  */
-export function openEditItemModal(itemId) {
+export async function openEditItemModal(itemId) {
   const item = state.currentList.itens.find(i => i.id === itemId);
   if (!item) return;
 
   const categories = ['Geral', 'Mercearia', 'Hortifruti', 'Carnes', 'Laticínios', 'Bebidas', 'Limpeza', 'Higiene', 'Padaria'];
   let selectedCategory = item.categoria || 'Geral';
+
+  const stats = await getProductPriceStats(item.nome);
 
   modalContainer.innerHTML = `
     <div class="modal-overlay" id="sheet-overlay">
@@ -678,10 +810,20 @@ export function openEditItemModal(itemId) {
         </div>
 
         <form id="form-edit-item">
-          <div class="form-group">
+          <div class="form-group" style="margin-bottom: 6px;">
             <label class="form-label">Nome do Produto</label>
             <input type="text" id="input-edit-name" class="form-input" value="${escapeHTML(item.nome)}" required />
           </div>
+
+          ${stats && stats.ultimoPreco > 0 ? `
+            <div class="price-suggestion-pill" style="margin-top: 4px; margin-bottom: 12px;">
+              <span>💡 Histórico: <strong>${formatCurrency(stats.ultimoPreco)}</strong> (${escapeHTML(stats.ultimoMercado)})</span>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" class="btn-use-suggested-price" id="btn-edit-use-suggested">Usar</button>
+                <button type="button" class="btn-use-suggested-price" id="btn-edit-open-history" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border);">📊 Ver</button>
+              </div>
+            </div>
+          ` : ''}
 
           <div class="form-group">
             <label class="form-label">Categoria</label>
@@ -728,6 +870,22 @@ export function openEditItemModal(itemId) {
   const btnDelete = document.getElementById('btn-delete-current-item');
   const btnClose = document.getElementById('btn-close-sheet');
   const overlay = document.getElementById('sheet-overlay');
+  const btnUseSuggested = document.getElementById('btn-edit-use-suggested');
+  const btnOpenHistory = document.getElementById('btn-edit-open-history');
+
+  if (btnUseSuggested && stats) {
+    btnUseSuggested.addEventListener('click', () => {
+      triggerHaptic();
+      inputPrice.value = stats.ultimoPreco.toFixed(2);
+      showToast(`Preço estimado ajustado para ${formatCurrency(stats.ultimoPreco)}!`);
+    });
+  }
+
+  if (btnOpenHistory) {
+    btnOpenHistory.addEventListener('click', () => {
+      openProductHistoryModal(item.nome);
+    });
+  }
 
   chips.forEach(chip => {
     chip.addEventListener('click', () => {
@@ -1336,6 +1494,390 @@ export async function openSyncModal() {
       });
       closeModal();
       showToast('Configuração do Firebase removida. Modo 100% local.');
+    });
+  }
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
+
+/**
+ * Modal: Visualização ampliada da foto da etiqueta
+ */
+export function openImageZoomModal(imageUrl, title = 'Foto da Etiqueta') {
+  triggerHaptic();
+  const zoomEl = document.createElement('div');
+  zoomEl.className = 'modal-overlay';
+  zoomEl.id = 'zoom-modal-overlay';
+  zoomEl.style.zIndex = '300';
+  zoomEl.innerHTML = `
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); max-width: 92vw; max-height: 85vh; padding: 14px; display: flex; flex-direction: column; align-items: center; box-shadow: var(--shadow-lg);">
+      <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary);">${escapeHTML(title)}</span>
+        <button id="btn-close-zoom" class="sheet-close-btn" style="width: 28px; height: 28px;">✕</button>
+      </div>
+      <div style="overflow: auto; max-height: 70vh; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+        <img src="${imageUrl}" style="max-width: 100%; height: auto; display: block;" alt="Foto da etiqueta" />
+      </div>
+    </div>
+  `;
+  document.body.appendChild(zoomEl);
+
+  const closeZoom = () => {
+    if (document.body.contains(zoomEl)) {
+      document.body.removeChild(zoomEl);
+    }
+  };
+  zoomEl.querySelector('#btn-close-zoom').addEventListener('click', closeZoom);
+  zoomEl.addEventListener('click', (e) => {
+    if (e.target === zoomEl) closeZoom();
+  });
+}
+
+/**
+ * Modal Bottom Sheet: Histórico de Preços por Produto (Fase 3)
+ * Menor/Maior/Último preço, gráfico SVG de variação e comparativo entre mercados
+ */
+export async function openProductHistoryModal(productName) {
+  triggerHaptic();
+  const stats = await getProductPriceStats(productName);
+
+  if (!stats || stats.totalCompras === 0) {
+    modalContainer.innerHTML = `
+      <div class="modal-overlay" id="sheet-overlay">
+        <div class="bottom-sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <div>
+              <h3 class="sheet-title">${escapeHTML(productName)}</h3>
+              <span class="item-subtitle" style="font-size: 0.8rem;">Histórico de Preços</span>
+            </div>
+            <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+          </div>
+          <div class="empty-state" style="padding: 24px 14px;">
+            <span style="font-size: 2.2rem;">📊</span>
+            <h4 style="color: var(--text-primary); font-size: 1rem; margin-top: 6px;">Nenhum preço registrado ainda</h4>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
+              Ao fotografar etiquetas ou marcar itens no carrinho, o histórico deste produto será gerado automaticamente.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+    const btnClose = document.getElementById('btn-close-sheet');
+    const overlay = document.getElementById('sheet-overlay');
+    btnClose.addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+    return;
+  }
+
+  const formatDate = (iso) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  };
+
+  // Comparativo de economia entre mercados
+  let savingsHtml = '';
+  if (stats.porMercado && stats.porMercado.length > 1) {
+    const cheapest = stats.porMercado[0];
+    const mostExpensive = stats.porMercado[stats.porMercado.length - 1];
+    const diff = mostExpensive.menor - cheapest.menor;
+    if (diff > 0) {
+      savingsHtml = `
+        <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 12px; font-size: 0.82rem; color: var(--text-primary);">
+          💡 <strong>Onde compensa mais?</strong> No <strong>${escapeHTML(cheapest.mercado)}</strong> você economiza até <strong>${formatCurrency(diff)}</strong> por unidade em comparação ao ${escapeHTML(mostExpensive.mercado)}.
+        </div>
+      `;
+    }
+  }
+
+  // Gráfico SVG de evolução temporal
+  const chartHtml = renderPriceTrendSVG(stats.historicoAsc);
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet" style="max-height: 92vh;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3 class="sheet-title" style="font-size: 1.15rem;">${escapeHTML(stats.nome)}</h3>
+            <span class="item-subtitle" style="font-size: 0.78rem;">${stats.totalCompras} compra(s) registrada(s)</span>
+          </div>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <!-- 1. Grid de 4 KPIs -->
+        <div class="price-stats-grid">
+          <div class="price-stat-card">
+            <span class="price-stat-label">Menor Preço</span>
+            <span class="price-stat-val best">${formatCurrency(stats.menorPreco)}</span>
+            <span class="price-stat-sub">${escapeHTML(stats.menorMercado)} • ${formatDate(stats.menorData)}</span>
+          </div>
+
+          <div class="price-stat-card">
+            <span class="price-stat-label">Último Pago</span>
+            <span class="price-stat-val latest">${formatCurrency(stats.ultimoPreco)}</span>
+            <span class="price-stat-sub">${escapeHTML(stats.ultimoMercado)} • ${formatDate(stats.ultimoData)}</span>
+          </div>
+
+          <div class="price-stat-card">
+            <span class="price-stat-label">Maior Preço</span>
+            <span class="price-stat-val high">${formatCurrency(stats.maiorPreco)}</span>
+            <span class="price-stat-sub">${escapeHTML(stats.maiorMercado)} • ${formatDate(stats.maiorData)}</span>
+          </div>
+
+          <div class="price-stat-card">
+            <span class="price-stat-label">Preço Médio</span>
+            <span class="price-stat-val">${formatCurrency(stats.mediaPreco)}</span>
+            <span class="price-stat-sub">${stats.variacaoPercentual >= 0 ? '+' : ''}${stats.variacaoPercentual}% histórico</span>
+          </div>
+        </div>
+
+        <!-- 2. Gráfico de Tendência SVG -->
+        <div style="margin-bottom: 14px;">
+          ${chartHtml}
+        </div>
+
+        <!-- 3. Comparativo entre Mercados -->
+        <div style="margin-bottom: 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <h4 style="font-size: 0.88rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">
+              🏪 Comparativo por Mercado
+            </h4>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">${stats.porMercado.length} mercado(s)</span>
+          </div>
+
+          ${savingsHtml}
+
+          <div>
+            ${stats.porMercado.map((m, idx) => `
+              <div class="market-compare-card ${idx === 0 ? 'is-best' : ''}">
+                <div class="market-name-wrap">
+                  <div class="market-name-title">
+                    <span>${escapeHTML(m.mercado)}</span>
+                    ${idx === 0 ? '<span class="market-badge-best">Mais Barato</span>' : ''}
+                  </div>
+                  <span style="font-size: 0.74rem; color: var(--text-muted);">
+                    ${m.contagem}x comprado • Última vez em ${formatDate(m.dataUltimo)}
+                  </span>
+                </div>
+                <div class="market-price-details">
+                  <span class="market-price-val">${formatCurrency(m.menor)}</span>
+                  <span style="font-size: 0.72rem; color: var(--text-muted);">
+                    ${m.ultimo !== m.menor ? `Último: ${formatCurrency(m.ultimo)}` : 'menor valor'}
+                  </span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- 4. Lista Cronológica de Compras Passadas -->
+        <div>
+          <h4 style="font-size: 0.88rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 8px;">
+            📜 Histórico de Compras (${stats.historicoDesc.length})
+          </h4>
+
+          <div>
+            ${stats.historicoDesc.map(rec => {
+              const subtotal = (Number(rec.quantidade) || 1) * (Number(rec.valor) || 0);
+              const originBadge = rec.origem === 'etiqueta' ? '📷 Foto' : (rec.origem === 'nota' ? '🧾 Nota' : '🛒 Carrinho');
+              return `
+                <div class="history-record-card">
+                  <div style="display: flex; align-items: center;">
+                    ${rec.fotoUrl ? `
+                      <button class="history-thumb-btn btn-view-photo" data-url="${escapeHTML(rec.fotoUrl)}" data-name="${escapeHTML(rec.nomeItem)}" title="Ver foto">
+                        <img src="${escapeHTML(rec.fotoUrl)}" alt="Etiqueta" />
+                      </button>
+                    ` : ''}
+                    <div>
+                      <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);">
+                        ${formatCurrency(rec.valor)} <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">/un</span>
+                      </div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                        ${escapeHTML(rec.mercado || 'Mercado Geral')} • ${formatDate(rec.data)}
+                      </div>
+                      <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 1px;">
+                        ${rec.quantidade || 1} un (Tot: ${formatCurrency(subtotal)}) • <span style="color: var(--primary-light);">${originBadge}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button class="action-icon-btn btn-delete-history-entry" data-id="${rec.id}" style="color: var(--danger); font-size: 0.85rem;" title="Remover este registro">
+                    🗑️
+                  </button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- 5. Ação Rápida: Adicionar à Lista Atual com Preço Sugerido -->
+        <button id="btn-add-to-list-from-history" class="sheet-btn-primary" style="width: 100%; margin-top: 16px;">
+          + Adicionar "${escapeHTML(stats.nome)}" à Lista (Est: ${formatCurrency(stats.ultimoPreco)})
+        </button>
+      </div>
+    </div>
+  `;
+
+  const btnClose = document.getElementById('btn-close-sheet');
+  const overlay = document.getElementById('sheet-overlay');
+  const btnAddToList = document.getElementById('btn-add-to-list-from-history');
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  // Zoom da foto
+  modalContainer.querySelectorAll('.btn-view-photo').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openImageZoomModal(btn.dataset.url, btn.dataset.name);
+    });
+  });
+
+  // Remoção de registro
+  modalContainer.querySelectorAll('.btn-delete-history-entry').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      triggerHaptic();
+      if (confirm('Deseja excluir este registro de preço do histórico?')) {
+        await removePriceRecord(btn.dataset.id);
+        showToast('Registro de preço removido.');
+        openProductHistoryModal(productName);
+      }
+    });
+  });
+
+  // Adicionar à lista ativa
+  if (btnAddToList) {
+    btnAddToList.addEventListener('click', async () => {
+      triggerHaptic();
+      await addItem({
+        nome: stats.nome,
+        categoria: 'Geral',
+        qtdPlanejada: 1,
+        precoEstimado: stats.ultimoPreco || stats.menorPreco || 0
+      });
+      closeModal();
+      showToast(`"${stats.nome}" adicionado com estimativa de ${formatCurrency(stats.ultimoPreco)}!`);
+    });
+  }
+}
+
+/**
+ * Modal Bottom Sheet: Catálogo Geral de Histórico de Preços (Fase 3)
+ */
+export async function openPriceHistoryCatalogModal() {
+  triggerHaptic();
+  const trackedProducts = await getAllTrackedProducts();
+
+  const renderProductList = (items) => {
+    if (!items || items.length === 0) {
+      return `
+        <div class="empty-state" style="padding: 24px 14px;">
+          <span style="font-size: 2rem;">🔍</span>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 6px;">
+            Nenhum produto encontrado com este nome.
+          </p>
+        </div>
+      `;
+    }
+
+    return items
+      .map(
+        (p) => `
+      <div class="catalog-item-card" data-name="${escapeHTML(p.nome)}">
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 2px;">
+            ${escapeHTML(p.nome)}
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">
+            ${p.totalCompras} compra(s) • Último no ${escapeHTML(p.ultimoMercado)}
+          </div>
+        </div>
+
+        <div style="text-align: right; display: flex; align-items: center; gap: 8px;">
+          <div>
+            <div style="font-size: 1rem; font-weight: 800; color: var(--success);">
+              ${formatCurrency(p.ultimoPreco)}
+            </div>
+            ${
+              p.menorPreco && p.menorPreco < p.ultimoPreco
+                ? `
+              <div style="font-size: 0.7rem; color: var(--text-muted);">
+                Menor: ${formatCurrency(p.menorPreco)}
+              </div>
+            `
+                : ''
+            }
+          </div>
+          <span style="color: var(--text-muted); font-size: 1.1rem;">➔</span>
+        </div>
+      </div>
+    `
+      )
+      .join('');
+  };
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet" style="max-height: 90vh;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3 class="sheet-title">Histórico de Preços</h3>
+            <span class="item-subtitle" style="font-size: 0.8rem;">Comparador de Mercados e Evolução</span>
+          </div>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <!-- Barra de Busca -->
+        <div style="margin-bottom: 14px;">
+          <input 
+            type="text" 
+            id="catalog-search-input" 
+            class="form-input" 
+            style="padding: 10px 14px; font-size: 0.92rem;" 
+            placeholder="🔍 Buscar produto no histórico..." 
+            autofocus 
+          />
+        </div>
+
+        <!-- Lista de Produtos -->
+        <div id="catalog-products-container" style="max-height: 58vh; overflow-y: auto;">
+          ${renderProductList(trackedProducts)}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const btnClose = document.getElementById('btn-close-sheet');
+  const overlay = document.getElementById('sheet-overlay');
+  const searchInput = document.getElementById('catalog-search-input');
+  const container = document.getElementById('catalog-products-container');
+
+  const attachCardListeners = () => {
+    container.querySelectorAll('.catalog-item-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        openProductHistoryModal(card.dataset.name);
+      });
+    });
+  };
+
+  attachCardListeners();
+
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.toLowerCase().trim();
+      const filtered = trackedProducts.filter((p) => p.nome.toLowerCase().includes(q));
+      container.innerHTML = renderProductList(filtered);
+      attachCardListeners();
     });
   }
 

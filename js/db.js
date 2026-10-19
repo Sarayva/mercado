@@ -1,12 +1,30 @@
 /* ==========================================================================
    Camada de Banco de Dados Local (IndexedDB) - Meu Mercado PWA
    Offline-first: Garante funcionamento veloz mesmo sem sinal no mercado
+   Stores: listas, precos, notas, config, sync_queue
    ========================================================================== */
 
 const DB_NAME = 'mercado_pwa_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Versão 2: Adiciona store de notas e fila de sincronização
 
 let dbInstance = null;
+
+// Listener para notificar o sync manager de novas alterações locais
+let onLocalChangeCallback = null;
+
+export function registerLocalChangeListener(callback) {
+  onLocalChangeCallback = callback;
+}
+
+function notifyLocalChange() {
+  if (typeof onLocalChangeCallback === 'function') {
+    try {
+      onLocalChangeCallback();
+    } catch (e) {
+      console.warn('[DB] Erro no listener de sincronização:', e);
+    }
+  }
+}
 
 /**
  * Inicializa a conexão com o IndexedDB e cria os Object Stores
@@ -33,24 +51,97 @@ export function initDB() {
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
 
-      // Store para Listas de Compras
+      // 1. Store para Listas de Compras
       if (!db.objectStoreNames.contains('listas')) {
         const listasStore = db.createObjectStore('listas', { keyPath: 'id' });
         listasStore.createIndex('dataCriacao', 'dataCriacao', { unique: false });
+        listasStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
 
-      // Store para Histórico de Preços (preparado para Fases 2 e 3)
+      // 2. Store para Histórico de Preços (Fases 2 e 3)
       if (!db.objectStoreNames.contains('precos')) {
         const precosStore = db.createObjectStore('precos', { keyPath: 'id' });
         precosStore.createIndex('itemId', 'itemId', { unique: false });
         precosStore.createIndex('data', 'data', { unique: false });
+        precosStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
 
-      // Store de Configurações gerais (lista ativa, sincronização)
+      // 3. Store para Notas Fiscais (Fase 4 & Sincronização)
+      if (!db.objectStoreNames.contains('notas')) {
+        const notasStore = db.createObjectStore('notas', { keyPath: 'id' });
+        notasStore.createIndex('data', 'data', { unique: false });
+        notasStore.createIndex('status', 'status', { unique: false });
+        notasStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      // 4. Store de Configurações gerais (lista ativa, sincronização, credenciais)
       if (!db.objectStoreNames.contains('config')) {
         db.createObjectStore('config', { keyPath: 'chave' });
       }
+
+      // 5. Fila de Sincronização Offline -> Firestore
+      if (!db.objectStoreNames.contains('sync_queue')) {
+        const queueStore = db.createObjectStore('sync_queue', { keyPath: 'id' });
+        queueStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
     };
+  });
+}
+
+/**
+ * Enfileira uma mutação na fila de sincronização
+ */
+export async function enqueueSync(collection, docId, action, data = null) {
+  const db = await initDB();
+  const queueEntry = {
+    id: `${collection}_${docId}`,
+    collection,
+    docId,
+    action, // 'upsert' | 'delete'
+    data: data ? JSON.parse(JSON.stringify(data)) : null,
+    timestamp: Date.now()
+  };
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['sync_queue'], 'readwrite');
+    const store = transaction.objectStore('sync_queue');
+    const request = store.put(queueEntry);
+
+    request.onsuccess = () => {
+      resolve(queueEntry);
+      notifyLocalChange();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Retorna todos os itens pendentes na fila de sincronização
+ */
+export async function getSyncQueue() {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['sync_queue'], 'readonly');
+    const store = transaction.objectStore('sync_queue');
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Remove um item da fila após sincronizado com sucesso
+ */
+export async function removeSyncQueueItem(id) {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['sync_queue'], 'readwrite');
+    const store = transaction.objectStore('sync_queue');
+    const request = store.delete(id);
+
+    request.onsuccess = () => resolve(true);
+    request.onerror = () => reject(request.error);
   });
 }
 
@@ -64,7 +155,10 @@ export async function getAllLists() {
     const store = transaction.objectStore('listas');
     const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => {
+      const results = (request.result || []).filter((l) => !l._deleted);
+      resolve(results);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -79,37 +173,55 @@ export async function getListById(id) {
     const store = transaction.objectStore('listas');
     const request = store.get(id);
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => {
+      const res = request.result;
+      resolve(res && !res._deleted ? res : null);
+    };
     request.onerror = () => reject(request.error);
   });
 }
 
 /**
- * Salva ou atualiza uma lista inteira
+ * Salva ou atualiza uma lista inteira (com timestamp e enfileiramento de sync)
  */
-export async function saveList(lista) {
+export async function saveList(lista, skipQueue = false) {
   const db = await initDB();
+  lista.updatedAt = lista.updatedAt || new Date().toISOString();
+
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['listas'], 'readwrite');
     const store = transaction.objectStore('listas');
     const request = store.put(lista);
 
-    request.onsuccess = () => resolve(lista);
+    request.onsuccess = async () => {
+      if (!skipQueue && !lista._deleted) {
+        await enqueueSync('listas', lista.id, 'upsert', lista);
+      }
+      resolve(lista);
+    };
     request.onerror = () => reject(request.error);
   });
 }
 
 /**
- * Remove uma lista
+ * Remove uma lista (com suporte a propagação de deleção via sync)
  */
-export async function deleteList(id) {
+export async function deleteList(id, skipQueue = false) {
   const db = await initDB();
+  const now = new Date().toISOString();
+
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['listas'], 'readwrite');
     const store = transaction.objectStore('listas');
+    // Marca como soft-deleted localmente ou deleta
     const request = store.delete(id);
 
-    request.onsuccess = () => resolve(true);
+    request.onsuccess = async () => {
+      if (!skipQueue) {
+        await enqueueSync('listas', id, 'delete', { id, _deleted: true, updatedAt: now });
+      }
+      resolve(true);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -147,7 +259,7 @@ export async function getConfig(chave) {
 /**
  * Grava uma entrada no histórico de preços (Fase 2 & Fase 3)
  */
-export async function savePreco(precoData) {
+export async function savePreco(precoData, skipQueue = false) {
   const db = await initDB();
   const entry = {
     id: precoData.id || 'preco_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -159,9 +271,11 @@ export async function savePreco(precoData) {
     precoPorKgLitro: precoData.precoPorKgLitro || null,
     quantidade: Number(precoData.quantidade) || 1,
     data: precoData.data || new Date().toISOString(),
+    updatedAt: precoData.updatedAt || new Date().toISOString(),
     mercado: precoData.mercado || 'Mercado Geral',
     fotoUrl: precoData.fotoUrl || null,
-    origem: precoData.origem || 'etiqueta'
+    origem: precoData.origem || 'etiqueta',
+    _deleted: precoData._deleted || false
   };
 
   return new Promise((resolve, reject) => {
@@ -169,7 +283,12 @@ export async function savePreco(precoData) {
     const store = transaction.objectStore('precos');
     const request = store.put(entry);
 
-    request.onsuccess = () => resolve(entry);
+    request.onsuccess = async () => {
+      if (!skipQueue && !entry._deleted) {
+        await enqueueSync('precos', entry.id, 'upsert', entry);
+      }
+      resolve(entry);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -184,7 +303,83 @@ export async function getAllPrecos() {
     const store = transaction.objectStore('precos');
     const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => {
+      const results = (request.result || []).filter((p) => !p._deleted);
+      resolve(results);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Remove um preço do histórico
+ */
+export async function deletePreco(id, skipQueue = false) {
+  const db = await initDB();
+  const now = new Date().toISOString();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['precos'], 'readwrite');
+    const store = transaction.objectStore('precos');
+    const request = store.delete(id);
+
+    request.onsuccess = async () => {
+      if (!skipQueue) {
+        await enqueueSync('precos', id, 'delete', { id, _deleted: true, updatedAt: now });
+      }
+      resolve(true);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Grava uma nota fiscal (Fase 4 & Sincronização)
+ */
+export async function saveNota(notaData, skipQueue = false) {
+  const db = await initDB();
+  const entry = {
+    id: notaData.id || 'nota_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    data: notaData.data || new Date().toISOString(),
+    updatedAt: notaData.updatedAt || new Date().toISOString(),
+    fotoUrl: notaData.fotoUrl || null,
+    qrUrl: notaData.qrUrl || null,
+    status: notaData.status || 'pendente', // 'pendente' | 'processada'
+    itens: notaData.itens || [],
+    total: Number(notaData.total) || 0,
+    mercado: notaData.mercado || '',
+    _deleted: notaData._deleted || false
+  };
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['notas'], 'readwrite');
+    const store = transaction.objectStore('notas');
+    const request = store.put(entry);
+
+    request.onsuccess = async () => {
+      if (!skipQueue && !entry._deleted) {
+        await enqueueSync('notas', entry.id, 'upsert', entry);
+      }
+      resolve(entry);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Retorna todas as notas fiscais cadastradas
+ */
+export async function getAllNotas() {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['notas'], 'readonly');
+    const store = transaction.objectStore('notas');
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const results = (request.result || []).filter((n) => !n._deleted);
+      resolve(results);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -202,13 +397,14 @@ export async function createDefaultListIfEmpty() {
     id: 'lista_' + Date.now(),
     nome: 'Compras da Semana',
     dataCriacao: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     itens: [
       {
         id: 'item_1',
         nome: 'Arroz 5kg',
         categoria: 'Mercearia',
         qtdPlanejada: 1,
-        precoEstimado: 28.90,
+        precoEstimado: 28.9,
         pego: false,
         qtdReal: 1,
         precoReal: 0,
@@ -219,7 +415,7 @@ export async function createDefaultListIfEmpty() {
         nome: 'Feijão Preto 1kg',
         categoria: 'Mercearia',
         qtdPlanejada: 2,
-        precoEstimado: 7.50,
+        precoEstimado: 7.5,
         pego: false,
         qtdReal: 2,
         precoReal: 0,

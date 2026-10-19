@@ -21,6 +21,8 @@ import {
 import { getAllLists, saveList, setConfig } from './db.js';
 import { capturePriceTagPhoto } from './camera.js';
 import { analyzePriceTag } from './vision.js';
+import { getSyncStatus, triggerSync, onSyncStatusChange } from './sync.js';
+import { saveActiveFirebaseConfig, getActiveFirebaseConfig, isFirestoreActive } from './firebase-config.js';
 
 // Utilitário para formatar moeda Real (BRL)
 export function formatCurrency(value) {
@@ -1117,6 +1119,225 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
     closeModal();
     showToast(`"${nome}" confirmado no carrinho!`);
   });
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
+
+/**
+ * Atualiza o badge discreto de status de sincronização no cabeçalho
+ */
+export function renderSyncBadge(payload) {
+  const btn = document.getElementById('sync-status-btn');
+  const text = document.getElementById('sync-status-text');
+  if (!btn || !text) return;
+
+  btn.classList.remove('sync-synced', 'sync-pending', 'sync-syncing', 'sync-offline');
+
+  const syncState = payload ? payload.state : 'offline';
+  const pendingCount = payload ? payload.pendingCount : 0;
+
+  switch (syncState) {
+    case 'sincronizado':
+      btn.classList.add('sync-synced');
+      text.textContent = 'sincronizado';
+      btn.title = 'Tudo sincronizado na nuvem (toque para detalhes)';
+      break;
+    case 'sincronizando':
+      btn.classList.add('sync-syncing');
+      text.textContent = 'sincronizando...';
+      btn.title = 'Sincronizando com a nuvem...';
+      break;
+    case 'pendente':
+      btn.classList.add('sync-pending');
+      text.textContent = `${pendingCount} pendente${pendingCount > 1 ? 's' : ''}`;
+      btn.title = `${pendingCount} alteração(ões) aguardando sincronização (toque para detalhes)`;
+      break;
+    case 'offline':
+    default:
+      btn.classList.add('sync-offline');
+      if (payload && payload.isFirestoreActive === false) {
+        text.textContent = 'local';
+        btn.title = 'Modo local (toque para configurar backup na nuvem)';
+      } else {
+        text.textContent = 'offline';
+        btn.title = 'Dispositivo offline - dados salvos com segurança no celular';
+      }
+      break;
+  }
+}
+
+/**
+ * Modal Bottom Sheet: Detalhes da Sincronização & Configuração do Firebase
+ */
+export async function openSyncModal() {
+  triggerHaptic();
+  const status = await getSyncStatus();
+  const config = await getActiveFirebaseConfig();
+  const isConfigured = Boolean(config && config.projectId && config.apiKey);
+
+  const formatLastSync = (date) => {
+    if (!date) return 'Ainda não realizada';
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const getStatusLabel = (s) => {
+    switch (s) {
+      case 'sincronizado':
+        return '<span style="color: var(--success); font-weight:700;">● Sincronizado</span>';
+      case 'sincronizando':
+        return '<span style="color: #38bdf8; font-weight:700;">● Sincronizando...</span>';
+      case 'pendente':
+        return `<span style="color: #facc15; font-weight:700;">● ${status.pendingCount} pendente(s)</span>`;
+      default:
+        return `<span style="color: var(--text-muted); font-weight:700;">● ${isConfigured ? 'Offline' : 'Modo 100% Local'}</span>`;
+    }
+  };
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3 class="sheet-title">Sincronização & Backup</h3>
+            <span class="item-subtitle" style="font-size: 0.8rem;">IndexedDB + Cloud Firestore</span>
+          </div>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <!-- Card de Status Atual -->
+        <div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">Status atual:</span>
+            <span id="modal-sync-badge-val" style="font-size: 0.85rem;">${getStatusLabel(status.state)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">Fila pendente:</span>
+            <span id="modal-sync-queue-count" style="font-size: 0.85rem; font-weight: 600;">${status.pendingCount} alteração(ões)</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">Última sincronização:</span>
+            <span id="modal-sync-last-time" style="font-size: 0.85rem; font-weight: 500;">${formatLastSync(status.lastSyncTimestamp)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">Internet:</span>
+            <span style="font-size: 0.85rem; font-weight: 600;">${status.isOnline ? '🟢 Online' : '⚪ Offline'}</span>
+          </div>
+        </div>
+
+        <!-- Botão Sincronizar Agora -->
+        <button id="btn-trigger-sync-now" class="sheet-btn-primary" style="width: 100%; margin-bottom: 16px;">
+          🔄 Sincronizar Agora
+        </button>
+
+        <!-- Configuração do Firebase -->
+        <div style="border-top: 1px solid var(--border); padding-top: 14px;">
+          <h4 style="font-size: 0.92rem; margin-bottom: 6px; color: var(--text-secondary);">⚙️ Conexão Firebase (Backup e Multi-aparelho)</h4>
+          <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+            O app funciona 100% offline no celular usando IndexedDB. Para sincronizar em mais de um aparelho ou manter backup na nuvem, insira a configuração Web do seu projeto Firebase.
+          </p>
+
+          <form id="form-firebase-config">
+            <div class="form-group" style="margin-bottom: 8px;">
+              <label class="form-label" style="font-size: 0.78rem;">Project ID</label>
+              <input type="text" id="fb-project-id" class="form-input" style="font-size: 0.85rem; padding: 8px 10px;" placeholder="ex: meu-mercado-pwa" value="${escapeHTML(config.projectId || '')}" />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 8px;">
+              <label class="form-label" style="font-size: 0.78rem;">API Key</label>
+              <input type="text" id="fb-api-key" class="form-input" style="font-size: 0.85rem; padding: 8px 10px;" placeholder="AIzaSy..." value="${escapeHTML(config.apiKey || '')}" />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 8px;">
+              <label class="form-label" style="font-size: 0.78rem;">Auth Domain</label>
+              <input type="text" id="fb-auth-domain" class="form-input" style="font-size: 0.85rem; padding: 8px 10px;" placeholder="ex: meu-mercado-pwa.firebaseapp.com" value="${escapeHTML(config.authDomain || '')}" />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label class="form-label" style="font-size: 0.78rem;">Storage Bucket (para fotos)</label>
+              <input type="text" id="fb-storage-bucket" class="form-input" style="font-size: 0.85rem; padding: 8px 10px;" placeholder="ex: meu-mercado-pwa.appspot.com" value="${escapeHTML(config.storageBucket || '')}" />
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+              ${isConfigured ? `
+                <button type="button" id="btn-clear-firebase" class="sheet-btn-secondary" style="color: var(--danger); font-size: 0.82rem; padding: 10px 12px;">
+                  Remover
+                </button>
+              ` : ''}
+              <button type="submit" class="sheet-btn-secondary" style="flex: 1; font-size: 0.85rem; padding: 10px;">
+                💾 Salvar e Conectar
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const overlay = document.getElementById('sheet-overlay');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const btnSyncNow = document.getElementById('btn-trigger-sync-now');
+  const formFb = document.getElementById('form-firebase-config');
+  const btnClearFb = document.getElementById('btn-clear-firebase');
+
+  btnSyncNow.addEventListener('click', async () => {
+    triggerHaptic();
+    btnSyncNow.textContent = '⏳ Sincronizando...';
+    btnSyncNow.disabled = true;
+
+    await triggerSync();
+
+    const updated = await getSyncStatus();
+    const badgeVal = document.getElementById('modal-sync-badge-val');
+    const queueVal = document.getElementById('modal-sync-queue-count');
+    const timeVal = document.getElementById('modal-sync-last-time');
+
+    if (badgeVal) badgeVal.innerHTML = getStatusLabel(updated.state);
+    if (queueVal) queueVal.textContent = `${updated.pendingCount} alteração(ões)`;
+    if (timeVal) timeVal.textContent = formatLastSync(updated.lastSyncTimestamp);
+
+    btnSyncNow.textContent = '🔄 Sincronizar Agora';
+    btnSyncNow.disabled = false;
+    showToast('Sincronização processada!');
+  });
+
+  formFb.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    triggerHaptic();
+
+    const newCfg = {
+      projectId: document.getElementById('fb-project-id').value.trim(),
+      apiKey: document.getElementById('fb-api-key').value.trim(),
+      authDomain: document.getElementById('fb-auth-domain').value.trim(),
+      storageBucket: document.getElementById('fb-storage-bucket').value.trim(),
+      messagingSenderId: config.messagingSenderId || '',
+      appId: config.appId || ''
+    };
+
+    await saveActiveFirebaseConfig(newCfg);
+    await triggerSync();
+    closeModal();
+    showToast('Configuração do Firebase atualizada!');
+  });
+
+  if (btnClearFb) {
+    btnClearFb.addEventListener('click', async () => {
+      triggerHaptic();
+      await saveActiveFirebaseConfig({
+        apiKey: '',
+        authDomain: '',
+        projectId: '',
+        storageBucket: '',
+        messagingSenderId: '',
+        appId: ''
+      });
+      closeModal();
+      showToast('Configuração do Firebase removida. Modo 100% local.');
+    });
+  }
 
   btnClose.addEventListener('click', closeModal);
   overlay.addEventListener('click', (e) => {

@@ -5,8 +5,9 @@
 
 import { initDB, createDefaultListIfEmpty, getConfig, getListById } from './db.js';
 import { state, setCurrentList, setMode, subscribe } from './state.js';
-import { renderUI, openAddItemModal, openListManagerModal, handleCameraScan } from './ui.js';
+import { renderUI, openAddItemModal, openListManagerModal, handleCameraScan, renderSyncBadge, openSyncModal } from './ui.js';
 import { initFirebase } from './firebase-config.js';
+import { initSync, onSyncStatusChange } from './sync.js';
 
 /**
  * Registra o Service Worker para habilitar o PWA e suporte offline
@@ -53,6 +54,9 @@ async function bootstrap() {
     renderUI();
   });
 
+  // Exponibiliza renderActiveList para sincronizações remotas em segundo plano
+  window.renderActiveList = () => renderUI();
+
   // Render inicial
   renderUI();
 
@@ -62,10 +66,15 @@ async function bootstrap() {
   // 5. Registra o Service Worker PWA
   registerServiceWorker();
 
-  // 6. Tenta inicializar Firebase se houver credenciais salvas
-  const firebaseConfig = await getConfig('firebaseConfig');
-  if (firebaseConfig) {
-    initFirebase(firebaseConfig);
+  // 6. Inicializa o Firebase e o motor de sincronização em segundo plano
+  try {
+    await initFirebase();
+    onSyncStatusChange((payload) => {
+      renderSyncBadge(payload);
+    });
+    await initSync();
+  } catch (syncErr) {
+    console.warn('[App] Sincronização em segundo plano iniciará quando possível:', syncErr);
   }
 }
 
@@ -73,6 +82,14 @@ async function bootstrap() {
  * Configura os ouvintes de clique globais
  */
 function setupEventListeners() {
+  // Badge de status de sincronização no header
+  const btnSync = document.getElementById('sync-status-btn');
+  if (btnSync) {
+    btnSync.addEventListener('click', () => {
+      openSyncModal();
+    });
+  }
+
   // Troca de lista (clique no nome da lista no header)
   const btnSelect = document.getElementById('header-list-select-btn');
   if (btnSelect) {

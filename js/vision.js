@@ -99,8 +99,8 @@ Regras obrigatórias:
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  // Modelos testados em ordem: gemini-1.5-flash (padrão) e gemini-2.0-flash (fallback)
-  const models = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+  // Modelos testados em ordem de velocidade e compatibilidade multimodal
+  const models = ['gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
   let lastErrorMsg = null;
 
   try {

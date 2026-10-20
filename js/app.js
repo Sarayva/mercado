@@ -3,7 +3,7 @@
    Ponto de entrada, inicialização offline, PWA e eventos
    ========================================================================== */
 
-import { initDB, createDefaultListIfEmpty, getConfig, getListById } from './db.js';
+import { initDB, createDefaultListIfEmpty, getConfig, setConfig, getListById } from './db.js';
 import { state, setCurrentList, setMode, subscribe } from './state.js';
 import {
   renderUI,
@@ -12,7 +12,8 @@ import {
   handleCameraScan,
   renderSyncBadge,
   openSyncModal,
-  openPriceHistoryCatalogModal
+  openPriceHistoryCatalogModal,
+  showToast
 } from './ui.js';
 import { initFirebase } from './firebase-config.js';
 import { initSync, onSyncStatusChange } from './sync.js';
@@ -45,6 +46,24 @@ async function bootstrap() {
     console.log('[App] 2. Chamando initDB()...');
     await initDB();
     console.log('[App] 3. initDB() concluído com sucesso.');
+
+    // Suporte a configuração de chave via URL (ex: ?key=...)
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const geminiParam = urlParams.get('geminiKey') || urlParams.get('key');
+      if (geminiParam && geminiParam.trim().length > 10) {
+        await setConfig('geminiApiKey', geminiParam.trim());
+        console.log('[App] Chave do Gemini configurada via URL com sucesso!');
+        urlParams.delete('geminiKey');
+        urlParams.delete('key');
+        const newQuery = urlParams.toString();
+        const newUrl = window.location.pathname + (newQuery ? '?' + newQuery : '') + window.location.hash;
+        window.history.replaceState({}, '', newUrl);
+        setTimeout(() => showToast('✨ Chave da IA Gemini ativada no seu aparelho!'), 400);
+      }
+    } catch (paramErr) {
+      console.warn('[App] Erro ao ler parâmetro de chave da URL:', paramErr);
+    }
 
     // 2. Popula dados históricos de demonstração se o histórico for novo (Fase 3)
     try {

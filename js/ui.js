@@ -1632,16 +1632,21 @@ export async function openGeminiKeyModal(onKeySaved = null) {
         <form id="form-gemini-key-sheet">
           <div class="form-group" style="margin-bottom: 14px;">
             <label class="form-label">Sua Chave de API do Gemini</label>
-            <input 
-              type="text" 
-              id="input-gemini-key-val" 
-              class="form-input" 
-              placeholder="Cole sua chave AIzaSy... aqui" 
-              value="${escapeHTML(currentKey)}"
-              style="font-family: monospace; font-size: 0.85rem;"
-              required
-              autofocus
-            />
+            <div style="display: flex; gap: 8px;">
+              <input 
+                type="text" 
+                id="input-gemini-key-val" 
+                class="form-input" 
+                placeholder="Cole sua chave aqui" 
+                value="${escapeHTML(currentKey)}"
+                style="font-family: monospace; font-size: 0.85rem; flex: 1;"
+                required
+                autofocus
+              />
+              <button type="button" id="btn-paste-gemini-key" class="sheet-btn-secondary" style="padding: 0 12px; white-space: nowrap; font-size: 0.82rem;">
+                📋 Colar
+              </button>
+            </div>
             <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 4px;">
               🔒 Salva exclusivamente no armazenamento local do seu aparelho.
             </span>
@@ -1665,6 +1670,22 @@ export async function openGeminiKeyModal(onKeySaved = null) {
   const form = document.getElementById('form-gemini-key-sheet');
   const inputKey = document.getElementById('input-gemini-key-val');
   const btnSkip = document.getElementById('btn-skip-gemini');
+  const btnPaste = document.getElementById('btn-paste-gemini-key');
+
+  if (btnPaste) {
+    btnPaste.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim()) {
+          inputKey.value = text.trim();
+          showToast('Chave colada da área de transferência!');
+        }
+      } catch (clipErr) {
+        inputKey.focus();
+        inputKey.select();
+      }
+    });
+  }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

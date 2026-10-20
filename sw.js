@@ -1,10 +1,11 @@
 // Service Worker para o app Meu Mercado PWA
 // Cacheia os arquivos estáticos essenciais para funcionamento 100% offline no mercado
 
-const CACHE_NAME = 'mercado-pwa-v15';
+const CACHE_NAME = 'mercado-pwa-v16';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './diagnostico.html',
   './manifest.json',
   './css/style.css',
   './css/main.css',

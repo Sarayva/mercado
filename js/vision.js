@@ -1,31 +1,25 @@
 /* ==========================================================================
-   Integração com IA de Visão Computacional - Meu Mercado PWA
+   Integração com IA de Visão Computacional (Google Gemini) - Meu Mercado PWA
    Extração inteligente de dados da etiqueta de preço no supermercado
-   
-   DIRETRIZ DE SEGURANÇA:
-   - NUNCA expor chaves de API de IA no front-end.
-   - Chamadas são sempre roteadas para a Cloud Function com autenticação.
+   Suporte a Gemini 1.5/2.0 Flash direto do navegador e Cloud Functions
    ========================================================================== */
 
 import { getConfig } from './db.js';
 import { getAuthToken } from './firebase-config.js';
 
-// URL padrão da Cloud Function (configurável no app pelo usuário)
-const DEFAULT_FUNCTION_URL = '/api/analyze-tag';
-const REQUEST_TIMEOUT_MS = 15000; // 15 segundos de timeout
+// Tempo máximo de resposta para a IA (14 segundos)
+const REQUEST_TIMEOUT_MS = 14000;
 
 /**
- * Envia a imagem da etiqueta para a Cloud Function de visão.
- * Em qualquer caso de erro (sem internet, timeout, etiqueta ilegível),
- * retorna um resultado seguro com campos em branco e aviso amigável,
- * permitindo o preenchimento manual na tela de confirmação sem perder a foto.
+ * Envia a imagem da etiqueta para análise via Google Gemini API
+ * ou Cloud Function personalizada caso configurada.
  */
 export async function analyzePriceTag(imageBase64) {
-  // 1. Flag de Desenvolvimento (opcional, desligada por padrão)
+  // 1. Flag de Desenvolvimento / Simulação Offline (opcional)
   const isDevSimulation = (await getConfig('devVisionSimulation')) === true;
   if (isDevSimulation) {
     console.info('[Vision] Modo de simulação de desenvolvimento ativo.');
-    await new Promise((r) => setTimeout(r, 1200));
+    await new Promise((r) => setTimeout(r, 800));
     return getSimulatedVisionResult();
   }
 
@@ -35,21 +29,177 @@ export async function analyzePriceTag(imageBase64) {
     return createFallbackResult('Sem conexão de internet no momento. Preencha os dados da etiqueta abaixo:');
   }
 
-  const endpointUrl = (await getConfig('visionFunctionUrl')) || (await getConfig('visionProxyUrl')) || DEFAULT_FUNCTION_URL;
+  // 3. Busca a chave do Gemini configurada no IndexedDB
+  const geminiApiKey = (await getConfig('geminiApiKey')) || (await getConfig('visionApiKey'));
+  const customFunctionUrl = await getConfig('visionFunctionUrl');
 
-  // 3. Chamada à Cloud Function com Timeout e Token de Autenticação
+  // Se tem a chave do Gemini configurada, chama diretamente a API oficial do Google
+  if (geminiApiKey && geminiApiKey.trim().length > 0) {
+    return await callGeminiVision(imageBase64, geminiApiKey.trim());
+  }
+
+  // Se não tem chave do Gemini mas tem uma Cloud Function personalizada
+  if (customFunctionUrl && customFunctionUrl.trim().length > 0 && !customFunctionUrl.startsWith('/api/')) {
+    return await callCustomCloudFunction(imageBase64, customFunctionUrl.trim());
+  }
+
+  // Caso nenhuma chave esteja configurada
+  return createFallbackResult('Chave do Google Gemini não encontrada. Adicione sua chave gratuita nas configurações para leitura automática:');
+}
+
+/**
+ * Chama a API oficial do Google Gemini (Multimodal Vision)
+ */
+async function callGeminiVision(imageBase64, apiKey) {
+  // Extrai o conteúdo base64 puro e o mimeType
+  const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+  let mimeType = 'image/jpeg';
+  if (imageBase64.includes(';') && imageBase64.includes(':')) {
+    const extractedMime = imageBase64.split(';')[0].replace('data:', '').trim();
+    if (extractedMime) mimeType = extractedMime;
+  }
+
+  const promptText = `Você é um leitor óptico especialista em etiquetas de preços de supermercados brasileiros.
+Analise com extrema atenção a foto da etiqueta anexada e extraia as informações estritamente em formato JSON:
+{
+  "nome": "Nome comercial legível e completo do produto",
+  "preco": 0.00,
+  "peso": "Peso ou volume (ex: 5kg, 1kg, 500g, 1L, 900ml) se constar na etiqueta",
+  "unidade": "un ou kg",
+  "precoPorKgLitro": "Preço fracionado por kg ou litro se houver (ex: R$ 5,90/kg)",
+  "mercado": "Nome do supermercado se impresso na etiqueta",
+  "confianca": 0.95
+}
+Regras obrigatórias:
+1. O campo 'preco' DEVE ser SEMPRE um número decimal com ponto (float, ex: 24.90 para R$ 24,90). NUNCA envie vírgula nem símbolo 'R$' no campo 'preco'.
+2. Se houver preço normal e preço de Clube / Cartão / Promoção / Atacado, envie no 'preco' o menor preço visível em destaque.
+3. Se o nome estiver abreviado na etiqueta (ex: 'ARROZ T1 5KG'), converta para o nome usual legível ('Arroz Tipo 1 5kg').
+4. Se algum dado não estiver legível na etiqueta, envie como string vazia "".`;
+
+  const payload = {
+    contents: [
+      {
+        parts: [
+          { text: promptText },
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: cleanBase64
+            }
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.1
+    }
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  // Modelos testados em ordem: gemini-1.5-flash (padrão) e gemini-2.0-flash (fallback)
+  const models = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+  let lastErrorMsg = null;
+
+  try {
+    for (const model of models) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      
+      try {
+        console.log(`[Vision] Enviando foto da etiqueta para o modelo ${model}...`);
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+
+        if (response.ok) {
+          clearTimeout(timeoutId);
+          const data = await response.json();
+          const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          
+          if (!textResponse) {
+            throw new Error('O modelo não retornou texto na resposta.');
+          }
+
+          let parsed = null;
+          try {
+            parsed = JSON.parse(textResponse);
+          } catch (jsonErr) {
+            // Tenta encontrar o JSON via regex caso venha com formatação extra
+            const match = textResponse.match(/\{[\s\S]*\}/);
+            if (match) {
+              parsed = JSON.parse(match[0]);
+            } else {
+              throw jsonErr;
+            }
+          }
+
+          console.log('[Vision] Leitura do Gemini concluída com sucesso:', parsed);
+          return sanitizeVisionResult(parsed);
+        }
+
+        // Se for 404 (modelo não habilitado), tenta o próximo modelo da lista
+        if (response.status === 404) {
+          console.warn(`[Vision] Modelo ${model} não disponível (404), tentando próximo...`);
+          continue;
+        }
+
+        // Erros de autenticação / Chave inválida
+        if (response.status === 400 || response.status === 403) {
+          clearTimeout(timeoutId);
+          const errData = await response.json().catch(() => ({}));
+          const detail = errData.error?.message || 'Chave do Gemini inválida ou sem permissão.';
+          console.error('[Vision] Erro de chave Gemini:', detail);
+          return createFallbackResult(`Chave do Gemini com erro (${detail}). Verifique sua chave nas configurações:`);
+        }
+
+        // Quota excedida
+        if (response.status === 429) {
+          clearTimeout(timeoutId);
+          return createFallbackResult('Limite temporário de requisições do Gemini atingido. Preencha manualmente:');
+        }
+
+        const errTxt = await response.text().catch(() => '');
+        lastErrorMsg = `Status ${response.status}: ${errTxt}`;
+      } catch (innerErr) {
+        if (innerErr.name === 'AbortError') throw innerErr;
+        lastErrorMsg = innerErr.message;
+        console.warn(`[Vision] Falha na tentativa com ${model}:`, innerErr);
+      }
+    }
+
+    clearTimeout(timeoutId);
+    return createFallbackResult(`Não foi possível ler a etiqueta com o Gemini (${lastErrorMsg || 'Verifique sua conexão'}). Preencha manualmente:`);
+  } catch (err) {
+    clearTimeout(timeoutId);
+
+    if (err.name === 'AbortError') {
+      console.warn('[Vision] Timeout na chamada do Gemini.');
+      return createFallbackResult('Tempo de resposta esgotado. A conexão pode estar lenta. Preencha manualmente:');
+    }
+
+    console.error('[Vision] Erro inesperado na chamada do Gemini:', err);
+    return createFallbackResult(`Erro ao comunicar com o Google Gemini. Preencha manualmente:`);
+  }
+}
+
+/**
+ * Chamada a uma Cloud Function personalizada (legado ou backend próprio)
+ */
+async function callCustomCloudFunction(imageBase64, endpointUrl) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const idToken = await getAuthToken();
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-
-    if (idToken) {
-      headers['Authorization'] = `Bearer ${idToken}`;
-    }
+    const headers = { 'Content-Type': 'application/json' };
+    if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
 
     const response = await fetch(endpointUrl, {
       method: 'POST',
@@ -59,47 +209,34 @@ export async function analyzePriceTag(imageBase64) {
     });
 
     clearTimeout(timeoutId);
-
     if (response.ok) {
       const data = await response.json();
       return sanitizeVisionResult(data);
     }
 
-    // Tratamento de respostas de erro da Cloud Function
-    if (response.status === 429) {
-      const errJson = await response.json().catch(() => ({}));
-      return createFallbackResult(errJson.error || 'Limite diário de leituras atingido. Preencha manualmente:');
-    }
-
-    if (response.status === 401) {
-      return createFallbackResult('Autenticação necessária na Cloud Function. Preencha manualmente:');
-    }
-
-    if (response.status === 413) {
-      return createFallbackResult('A foto ficou muito grande. Tente novamente ou preencha manualmente:');
-    }
-
-    console.warn(`[Vision] Servidor retornou status ${response.status}.`);
-    return createFallbackResult('Não foi possível ler a etiqueta automaticamente. Preencha os campos abaixo:');
+    return createFallbackResult('Não foi possível ler a etiqueta automaticamente no servidor. Preencha abaixo:');
   } catch (err) {
     clearTimeout(timeoutId);
-
     if (err.name === 'AbortError') {
-      console.warn('[Vision] Timeout na leitura da etiqueta (mais de 15s).');
-      return createFallbackResult('Tempo de resposta esgotado. A conexão pode estar lenta. Preencha manualmente:');
+      return createFallbackResult('Tempo de resposta esgotado no servidor. Preencha manualmente:');
     }
-
-    console.warn('[Vision] Falha na comunicação com a Cloud Function:', err.message);
-    return createFallbackResult('Não foi possível conectar ao serviço de visão. Preencha manualmente:');
+    return createFallbackResult('Falha ao conectar ao servidor de visão. Preencha manualmente:');
   }
 }
 
 /**
  * Normaliza e valida os dados retornados pela IA
  */
-function sanitizeVisionResult(raw) {
-  const precoNum = parseFloat(raw.preco);
-  const confiancaNum = typeof raw.confianca === 'number' ? raw.confianca : 0.8;
+export function sanitizeVisionResult(raw) {
+  let precoNum = 0;
+  if (typeof raw.preco === 'number') {
+    precoNum = raw.preco;
+  } else if (typeof raw.preco === 'string') {
+    const cleanStr = raw.preco.replace('R$', '').trim().replace(/\./g, '').replace(',', '.');
+    precoNum = parseFloat(cleanStr) || 0;
+  }
+
+  const confiancaNum = typeof raw.confianca === 'number' ? raw.confianca : 0.9;
   const isIlegivel = !raw.nome && (!precoNum || precoNum <= 0);
 
   return {
@@ -111,7 +248,7 @@ function sanitizeVisionResult(raw) {
     precoPorKgLitro: raw.precoPorKgLitro ? String(raw.precoPorKgLitro).trim() : '',
     mercado: raw.mercado ? String(raw.mercado).trim() : '',
     confianca: confiancaNum,
-    aviso: isIlegivel ? 'Etiqueta com leitura parcial ou ilegível. Por favor, confira os valores abaixo:' : null
+    aviso: isIlegivel ? 'Etiqueta com leitura parcial ou ilegível. Por favor, confira ou complete os dados abaixo:' : null
   };
 }
 
@@ -134,7 +271,6 @@ function createFallbackResult(mensagemAviso) {
 
 /**
  * Simulação de desenvolvimento para testes de interface offline
- * ATIVADA SOMENTE se a flag `devVisionSimulation: true` estiver salva no IndexedDB
  */
 function getSimulatedVisionResult() {
   const mockOptions = [

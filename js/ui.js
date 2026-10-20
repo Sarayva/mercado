@@ -1226,6 +1226,7 @@ export async function openEditItemModal(itemId) {
  */
 export async function openListManagerModal() {
   const lists = await getAllLists();
+  const currentGeminiKey = (await getConfig('geminiApiKey')) || '';
   const currentVisionUrl = (await getConfig('visionFunctionUrl')) || '';
   const isDevSim = (await getConfig('devVisionSimulation')) === true;
 
@@ -1277,25 +1278,29 @@ export async function openListManagerModal() {
           </div>
         </div>
 
-        <!-- Configurações da IA de Visão -->
+        <!-- Configurações da IA de Visão (Google Gemini) -->
         <div style="border-top: 1px solid var(--border); padding-top: 14px; margin-top: 16px;">
-          <h4 style="font-size: 0.92rem; margin-bottom: 10px; color: var(--text-secondary);">⚙️ Configurações da IA de Visão</h4>
+          <h4 style="font-size: 0.92rem; margin-bottom: 10px; color: var(--text-secondary);">✨ IA de Leitura de Etiquetas (Google Gemini)</h4>
           
-          <div class="form-group" style="margin-bottom: 10px;">
-            <label class="form-label" style="font-size: 0.78rem;">URL da Cloud Function (analyzePriceTag)</label>
-            <input type="url" id="input-vision-url" class="form-input" style="font-size: 0.85rem; padding: 10px 12px;" placeholder="https://<regiao>-<projeto>.cloudfunctions.net/analyzePriceTag" value="${escapeHTML(currentVisionUrl)}" />
+          <div class="form-group" style="margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+              <label class="form-label" style="font-size: 0.78rem; margin-bottom: 0;">Chave da API do Google Gemini</label>
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="font-size: 0.75rem; color: var(--primary-light); text-decoration: underline; font-weight: 600;">Gerar Chave Grátis ↗</a>
+            </div>
+            <input type="password" id="input-gemini-key-settings" class="form-input" style="font-size: 0.85rem; padding: 10px 12px; font-family: monospace;" placeholder="Cole sua chave AIzaSy... aqui" value="${escapeHTML(currentGeminiKey)}" />
+            <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 4px;">🔒 Salva apenas no seu aparelho. Gratuita pelo Google AI Studio.</span>
           </div>
 
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; background: var(--bg); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
             <div>
               <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Simulação Offline de Teste</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">Gera dados fictícios sem chamar a nuvem</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Gera dados fictícios sem chamar a internet</div>
             </div>
             <input type="checkbox" id="check-dev-sim" ${isDevSim ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;" />
           </div>
 
           <button id="btn-save-vision-config" class="sheet-btn-secondary" style="width: 100%; font-size: 0.88rem; padding: 10px;">
-            Salvar Configurações
+            Salvar Configurações de IA
           </button>
         </div>
       </div>
@@ -1309,7 +1314,7 @@ export async function openListManagerModal() {
   const inputNewBudget = document.getElementById('input-new-list-budget');
   const btnOpenReplenish = document.getElementById('btn-open-replenish-modal');
   const btnSaveVision = document.getElementById('btn-save-vision-config');
-  const inputVisionUrl = document.getElementById('input-vision-url');
+  const inputGeminiKey = document.getElementById('input-gemini-key-settings');
   const checkDevSim = document.getElementById('check-dev-sim');
 
   if (btnOpenReplenish) {
@@ -1355,13 +1360,13 @@ export async function openListManagerModal() {
 
   btnSaveVision.addEventListener('click', async () => {
     triggerHaptic();
-    const url = inputVisionUrl.value.trim();
+    const key = inputGeminiKey.value.trim();
     const simEnabled = checkDevSim.checked;
 
-    await setConfig('visionFunctionUrl', url);
+    await setConfig('geminiApiKey', key);
     await setConfig('devVisionSimulation', simEnabled);
 
-    showToast(simEnabled ? 'Simulação ativada!' : 'Configurações de IA salvas!');
+    showToast(simEnabled ? 'Simulação ativada!' : (key ? 'Chave do Gemini salva com sucesso!' : 'Configurações de IA salvas!'));
     closeModal();
   });
 }
@@ -1578,6 +1583,128 @@ export async function openReplenishmentModal() {
  * Inicia o fluxo de captura de foto da etiqueta e extração por IA (Fase 2)
  */
 export async function handleCameraScan() {
+  const geminiApiKey = (await getConfig('geminiApiKey')) || (await getConfig('visionApiKey'));
+  const isDevSim = (await getConfig('devVisionSimulation')) === true;
+  const customFunctionUrl = await getConfig('visionFunctionUrl');
+
+  // Se não houver chave do Gemini configurada e nem simulação ativa, abre modal para o usuário inserir
+  if (!geminiApiKey && !isDevSim && (!customFunctionUrl || customFunctionUrl.startsWith('/api/'))) {
+    openGeminiKeyModal(async () => {
+      await proceedWithCameraScan();
+    });
+    return;
+  }
+
+  await proceedWithCameraScan();
+}
+
+/**
+ * Modal: Configurar Chave da API do Google Gemini para Leitura de Etiquetas
+ */
+export async function openGeminiKeyModal(onKeySaved = null) {
+  const currentKey = (await getConfig('geminiApiKey')) || '';
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet" style="max-height: 90vh;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3 class="sheet-title">✨ Ativar IA do Google Gemini</h3>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <p style="font-size: 0.86rem; color: var(--text-secondary); line-height: 1.45; margin-bottom: 12px;">
+          Para que o aplicativo leia automaticamente o <strong>nome, preço e peso</strong> direto da foto da etiqueta, conecte sua chave gratuita do Google Gemini:
+        </p>
+
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: var(--radius-md); padding: 12px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+            <span style="font-size: 1.05rem;">💡</span>
+            <strong style="color: var(--success); font-size: 0.84rem;">Como gerar sua chave em 1 minuto (100% gratuita):</strong>
+          </div>
+          <ol style="font-size: 0.78rem; color: var(--text-muted); padding-left: 18px; margin: 4px 0 8px 0; line-height: 1.45;">
+            <li>Acesse o <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color: var(--primary-light); text-decoration: underline; font-weight: 700;">Google AI Studio ↗</a></li>
+            <li>Faça login com sua conta Google e clique em <strong>"Create API Key"</strong></li>
+            <li>Cole a chave gerada no campo abaixo</li>
+          </ol>
+        </div>
+
+        <form id="form-gemini-key-sheet">
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label">Sua Chave de API do Gemini</label>
+            <input 
+              type="text" 
+              id="input-gemini-key-val" 
+              class="form-input" 
+              placeholder="Cole sua chave AIzaSy... aqui" 
+              value="${escapeHTML(currentKey)}"
+              style="font-family: monospace; font-size: 0.85rem;"
+              required
+              autofocus
+            />
+            <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 4px;">
+              🔒 Salva exclusivamente no armazenamento local do seu aparelho.
+            </span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button type="submit" class="sheet-btn-primary" style="padding: 12px;">
+              ✓ Salvar Chave e Fotografar
+            </button>
+            <button type="button" id="btn-skip-gemini" class="sheet-btn-secondary" style="padding: 10px;">
+              Fotografar sem IA (Preencher Manual)
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  const overlay = document.getElementById('sheet-overlay');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const form = document.getElementById('form-gemini-key-sheet');
+  const inputKey = document.getElementById('input-gemini-key-val');
+  const btnSkip = document.getElementById('btn-skip-gemini');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    triggerHaptic();
+    const key = inputKey.value.trim();
+    if (!key) return;
+
+    await setConfig('geminiApiKey', key);
+    closeModal();
+    showToast('Chave do Gemini ativada! ✨');
+
+    if (typeof onKeySaved === 'function') {
+      setTimeout(() => {
+        onKeySaved();
+      }, 300);
+    }
+  });
+
+  if (btnSkip) {
+    btnSkip.addEventListener('click', () => {
+      triggerHaptic();
+      closeModal();
+      if (typeof onKeySaved === 'function') {
+        setTimeout(() => {
+          onKeySaved();
+        }, 200);
+      }
+    });
+  }
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+}
+
+/**
+ * Executa a captura da foto e a análise pela IA
+ */
+async function proceedWithCameraScan() {
   let photo = null;
   try {
     triggerHaptic();
@@ -1589,8 +1716,8 @@ export async function handleCameraScan() {
       <div class="modal-overlay">
         <div style="background: var(--bg-card); padding: 28px 20px; border-radius: var(--radius-lg); text-align: center; border: 1px solid var(--border); max-width: 320px; width: 88%; box-shadow: 0 10px 30px rgba(0,0,0,0.7);">
           <div class="scanning-spinner"></div>
-          <h4 style="margin-top: 16px; font-size: 1.15rem; color: var(--text-primary);">Lendo Etiqueta...</h4>
-          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">Identificando produto, preço e peso pela foto.</p>
+          <h4 style="margin-top: 16px; font-size: 1.15rem; color: var(--text-primary);">Lendo Etiqueta com IA...</h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">O Google Gemini está identificando produto, preço e peso.</p>
         </div>
       </div>
     `;
@@ -1644,7 +1771,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
             <h3 class="sheet-title">Confirmar Produto</h3>
             <span class="item-subtitle" style="font-size: 0.8rem;">
               ${extracted.sucesso && confiancaPct >= 80 
-                ? `✓ Lido por IA (${confiancaPct}% de confiança)` 
+                ? `✓ Lido por IA Gemini (${confiancaPct}% de confiança)` 
                 : 'Verifique e ajuste os dados da etiqueta'}
             </span>
           </div>
@@ -1652,9 +1779,14 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
         </div>
 
         ${extracted.aviso ? `
-          <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); color: #facc15; padding: 10px 14px; border-radius: var(--radius-md); font-size: 0.84rem; margin-bottom: 14px; line-height: 1.4; display: flex; align-items: flex-start; gap: 8px;">
-            <span style="font-size: 1.1rem; line-height: 1;">⚠️</span>
-            <span>${escapeHTML(extracted.aviso)}</span>
+          <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); color: #facc15; padding: 10px 14px; border-radius: var(--radius-md); font-size: 0.84rem; margin-bottom: 14px; line-height: 1.4; display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: flex-start; gap: 8px;">
+              <span style="font-size: 1.1rem; line-height: 1;">⚠️</span>
+              <span>${escapeHTML(extracted.aviso)}</span>
+            </div>
+            <button type="button" id="btn-edit-gemini-key-confirm" style="align-self: flex-start; background: rgba(16, 185, 129, 0.2); border: 1px solid var(--success); color: var(--success); padding: 5px 12px; border-radius: var(--radius-sm); font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+              🔑 Inserir / Trocar Chave Gemini
+            </button>
           </div>
         ` : ''}
 
@@ -1860,6 +1992,13 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
     closeModal();
     showToast(`"${nome}" confirmado no carrinho!`);
   });
+
+  const btnEditGeminiConfirm = document.getElementById('btn-edit-gemini-key-confirm');
+  if (btnEditGeminiConfirm) {
+    btnEditGeminiConfirm.addEventListener('click', () => {
+      openGeminiKeyModal();
+    });
+  }
 
   btnClose.addEventListener('click', closeModal);
   overlay.addEventListener('click', (e) => {

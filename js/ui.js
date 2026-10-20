@@ -20,7 +20,7 @@ import {
   toggleItemEssential
 } from './state.js';
 
-import { getAllLists, saveList, setConfig } from './db.js';
+import { getAllLists, saveList, getConfig, setConfig } from './db.js';
 import { capturePriceTagPhoto } from './camera.js';
 import { analyzePriceTag } from './vision.js';
 import { getSyncStatus, triggerSync, onSyncStatusChange } from './sync.js';

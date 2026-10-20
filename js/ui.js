@@ -1805,9 +1805,14 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
               <span style="font-size: 1.1rem; line-height: 1;">⚠️</span>
               <span>${escapeHTML(extracted.aviso)}</span>
             </div>
-            <button type="button" id="btn-edit-gemini-key-confirm" style="align-self: flex-start; background: rgba(16, 185, 129, 0.2); border: 1px solid var(--success); color: var(--success); padding: 5px 12px; border-radius: var(--radius-sm); font-size: 0.78rem; font-weight: 700; cursor: pointer;">
-              🔑 Inserir / Trocar Chave Gemini
-            </button>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" id="btn-retry-ai-scan" style="background: var(--primary); border: none; color: #fff; padding: 6px 14px; border-radius: var(--radius-sm); font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                🔄 Tentar Ler Foto Novamente
+              </button>
+              <button type="button" id="btn-edit-gemini-key-confirm" style="background: rgba(16, 185, 129, 0.2); border: 1px solid var(--success); color: var(--success); padding: 5px 12px; border-radius: var(--radius-sm); font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+                🔑 Inserir / Trocar Chave Gemini
+              </button>
+            </div>
           </div>
         ` : ''}
 
@@ -2018,6 +2023,24 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
   if (btnEditGeminiConfirm) {
     btnEditGeminiConfirm.addEventListener('click', () => {
       openGeminiKeyModal();
+    });
+  }
+
+  const btnRetryAi = document.getElementById('btn-retry-ai-scan');
+  if (btnRetryAi && photoDataUrl) {
+    btnRetryAi.addEventListener('click', async () => {
+      triggerHaptic();
+      modalContainer.innerHTML = `
+        <div class="modal-overlay">
+          <div style="background: var(--bg-card); padding: 28px 20px; border-radius: var(--radius-lg); text-align: center; border: 1px solid var(--border); max-width: 320px; width: 88%; box-shadow: 0 10px 30px rgba(0,0,0,0.7);">
+            <div class="scanning-spinner"></div>
+            <h4 style="margin-top: 16px; font-size: 1.15rem; color: var(--text-primary);">Lendo Etiqueta com IA...</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">Reprocessando foto com Google Gemini.</p>
+          </div>
+        </div>
+      `;
+      const retryResult = await analyzePriceTag(photoDataUrl);
+      openLabelConfirmSheet(retryResult, photoDataUrl);
     });
   }
 

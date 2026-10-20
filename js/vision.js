@@ -7,8 +7,8 @@
 import { getConfig } from './db.js';
 import { getAuthToken } from './firebase-config.js';
 
-// Tempo máximo de resposta para a IA (14 segundos)
-const REQUEST_TIMEOUT_MS = 14000;
+// Tempo máximo de resposta para a IA (24 segundos)
+const REQUEST_TIMEOUT_MS = 24000;
 
 /**
  * Envia a imagem da etiqueta para análise via Google Gemini API
@@ -96,97 +96,82 @@ Regras obrigatórias:
     }
   };
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   // Modelos testados em ordem de velocidade e compatibilidade multimodal
-  const models = ['gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
+  const models = ['gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-flash-latest'];
   let lastErrorMsg = null;
 
-  try {
-    for (const model of models) {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-      
-      try {
-        console.log(`[Vision] Enviando foto da etiqueta para o modelo ${model}...`);
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
+  for (const model of models) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const attemptCtrl = new AbortController();
+    const attemptTimer = setTimeout(() => attemptCtrl.abort(), 14000);
 
-        if (response.ok) {
-          clearTimeout(timeoutId);
-          const data = await response.json();
-          const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          
-          if (!textResponse) {
-            throw new Error('O modelo não retornou texto na resposta.');
+    try {
+      console.log(`[Vision] Enviando foto da etiqueta para o modelo ${model}...`);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: attemptCtrl.signal
+      });
+      clearTimeout(attemptTimer);
+
+      if (response.ok) {
+        const data = await response.json();
+        const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!textResponse) {
+          throw new Error('O modelo não retornou texto na resposta.');
+        }
+
+        let parsed = null;
+        try {
+          parsed = JSON.parse(textResponse);
+        } catch (jsonErr) {
+          // Tenta encontrar o JSON via regex caso venha com formatação extra
+          const match = textResponse.match(/\{[\s\S]*\}/);
+          if (match) {
+            parsed = JSON.parse(match[0]);
+          } else {
+            throw jsonErr;
           }
-
-          let parsed = null;
-          try {
-            parsed = JSON.parse(textResponse);
-          } catch (jsonErr) {
-            // Tenta encontrar o JSON via regex caso venha com formatação extra
-            const match = textResponse.match(/\{[\s\S]*\}/);
-            if (match) {
-              parsed = JSON.parse(match[0]);
-            } else {
-              throw jsonErr;
-            }
-          }
-
-          console.log('[Vision] Leitura do Gemini concluída com sucesso:', parsed);
-          return sanitizeVisionResult(parsed);
         }
 
-        // Se for 404 (modelo não habilitado), tenta o próximo modelo da lista
-        if (response.status === 404) {
-          console.warn(`[Vision] Modelo ${model} não disponível (404), tentando próximo...`);
-          continue;
-        }
-
-        // Erros de autenticação / Chave inválida
-        if (response.status === 400 || response.status === 403) {
-          clearTimeout(timeoutId);
-          const errData = await response.json().catch(() => ({}));
-          const detail = errData.error?.message || 'Chave do Gemini inválida ou sem permissão.';
-          console.error('[Vision] Erro de chave Gemini:', detail);
-          return createFallbackResult(`Chave do Gemini com erro (${detail}). Verifique sua chave nas configurações:`);
-        }
-
-        // Quota excedida
-        if (response.status === 429) {
-          clearTimeout(timeoutId);
-          return createFallbackResult('Limite temporário de requisições do Gemini atingido. Preencha manualmente:');
-        }
-
-        const errTxt = await response.text().catch(() => '');
-        lastErrorMsg = `Status ${response.status}: ${errTxt}`;
-      } catch (innerErr) {
-        if (innerErr.name === 'AbortError') throw innerErr;
-        lastErrorMsg = innerErr.message;
-        console.warn(`[Vision] Falha na tentativa com ${model}:`, innerErr);
+        console.log('[Vision] Leitura do Gemini concluída com sucesso:', parsed);
+        return sanitizeVisionResult(parsed);
       }
+
+      // Se for 404 (modelo não habilitado), tenta o próximo modelo da lista
+      if (response.status === 404) {
+        console.warn(`[Vision] Modelo ${model} não disponível (404), tentando próximo...`);
+        continue;
+      }
+
+      // Erros de autenticação / Chave inválida
+      if (response.status === 400 || response.status === 403) {
+        const errData = await response.json().catch(() => ({}));
+        const detail = errData.error?.message || 'Chave do Gemini inválida ou sem permissão.';
+        console.error('[Vision] Erro de chave Gemini:', detail);
+        return createFallbackResult(`Chave do Gemini com erro (${detail}). Verifique sua chave nas configurações:`);
+      }
+
+      // Quota excedida
+      if (response.status === 429) {
+        console.warn('[Vision] Limite de requisições 429 atingido.');
+        return createFallbackResult('Limite temporário de requisições atingido. Aguarde alguns segundos ou preencha manualmente:');
+      }
+
+      const errTxt = await response.text().catch(() => '');
+      lastErrorMsg = `Status ${response.status}: ${errTxt}`;
+    } catch (innerErr) {
+      clearTimeout(attemptTimer);
+      console.warn(`[Vision] Falha na tentativa com ${model}:`, innerErr.name, innerErr.message);
+      lastErrorMsg = innerErr.name === 'AbortError' ? 'Tempo de resposta esgotado (rede lenta)' : innerErr.message;
     }
-
-    clearTimeout(timeoutId);
-    return createFallbackResult(`Não foi possível ler a etiqueta com o Gemini (${lastErrorMsg || 'Verifique sua conexão'}). Preencha manualmente:`);
-  } catch (err) {
-    clearTimeout(timeoutId);
-
-    if (err.name === 'AbortError') {
-      console.warn('[Vision] Timeout na chamada do Gemini.');
-      return createFallbackResult('Tempo de resposta esgotado. A conexão pode estar lenta. Preencha manualmente:');
-    }
-
-    console.error('[Vision] Erro inesperado na chamada do Gemini:', err);
-    return createFallbackResult(`Erro ao comunicar com o Google Gemini. Preencha manualmente:`);
   }
+
+  return createFallbackResult('Tempo de resposta esgotado. A conexão pode estar lenta. Preencha manualmente ou clique em Tentar Novamente:');
 }
 
 /**

@@ -204,8 +204,8 @@ async function callGeminiVision(imageBase64, apiKey) {
   // Prompt estrito de sistema da Etapa 2
   const promptText = `Você lê etiquetas de preço de supermercado brasileiro a partir de uma foto. Responda SOMENTE com JSON válido: descricao (nome completo do produto), preco (número em reais), peso_valor (número ou null), peso_unidade ('g','kg','ml','l','un' ou null), preco_por_kg_ou_l (número ou null), codigo_barras (string ou null), confianca ('alta','media','baixa'). Campo ilegível = null. Nunca invente valores.`;
 
-  // Modelos testados no tier grátis em ordem de velocidade
-  const models = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'];
+  // Modelos testados no tier grátis em ordem de velocidade e alta cota (Flash-Lite = 1.500/dia)
+  const models = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
   let lastErrorMsg = null;
 
   for (const model of models) {
@@ -215,6 +215,17 @@ async function callGeminiVision(imageBase64, apiKey) {
     for (let attempt = 1; attempt <= 2; attempt++) {
       const attemptCtrl = new AbortController();
       const attemptTimer = setTimeout(() => attemptCtrl.abort(), REQUEST_TIMEOUT_PER_ATTEMPT_MS);
+
+      const generationConfig = {
+        responseMimeType: 'application/json',
+        temperature: 0.1
+      };
+      // Apenas modelos que suportam thinkingConfig recebem thinkingBudget: 0
+      if (!model.includes('lite')) {
+        generationConfig.thinkingConfig = {
+          thinkingBudget: 0
+        };
+      }
 
       const payload = {
         contents: [
@@ -230,13 +241,7 @@ async function callGeminiVision(imageBase64, apiKey) {
             ]
           }
         ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-          thinkingConfig: {
-            thinkingBudget: 0
-          }
-        }
+        generationConfig
       };
 
       try {
@@ -296,18 +301,16 @@ async function callGeminiVision(imageBase64, apiKey) {
           break;
         }
 
-        // Erro 429: limite gratuito atingido
+        // Erro 429: limite temporário atingido
         if (response.status === 429) {
-          console.warn(`[Vision] Limite de requisições 429 no modelo ${model}. Tentativa ${attempt}/2.`);
+          console.warn(`[Vision] Limite 429 no modelo ${model}. Tentativa ${attempt}/2.`);
           if (attempt === 1) {
-            // Espera curta (1.8s) e tenta de novo
             await new Promise(r => setTimeout(r, 1800));
             continue;
           } else {
-            // Falhou após retry: guarda foto como pendente para não perder nada
-            console.warn('[Vision] Limite 429 persistiu. Guardando foto na fila de pendentes...');
-            await savePendingVisionPhoto(imageBase64);
-            return createFallbackResult('Limite temporário de requisições atingido. A foto foi guardada como pendente e não foi perdida. Preencha manualmente ou aguarde:', { isPending: true });
+            console.warn(`[Vision] Cota do modelo ${model} esgotada. Tentando próximo modelo...`);
+            lastErrorMsg = 'Limite 429 em ' + model;
+            break; // Tenta o próximo modelo da lista em vez de abortar tudo!
           }
         }
 
@@ -331,6 +334,11 @@ async function callGeminiVision(imageBase64, apiKey) {
         }
       }
     }
+  }
+
+  if (lastErrorMsg && lastErrorMsg.includes('429')) {
+    await savePendingVisionPhoto(imageBase64);
+    return createFallbackResult('Limite temporário de requisições atingido. A foto foi guardada como pendente e não foi perdida. Preencha manualmente ou aguarde:', { isPending: true });
   }
 
   return createFallbackResult('Não foi possível ler a etiqueta automaticamente no momento (' + (lastErrorMsg || 'tempo esgotado') + '). Preencha abaixo ou clique em Tentar Novamente:');

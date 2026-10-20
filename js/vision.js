@@ -7,8 +7,8 @@
 import { getConfig, setConfig } from './db.js';
 import { getAuthToken } from './firebase-config.js';
 
-// Tempo máximo de resposta por tentativa da IA (15 segundos)
-const REQUEST_TIMEOUT_PER_ATTEMPT_MS = 15000;
+// Tempo máximo de resposta por tentativa da IA (28 segundos para evitar falsos cortes em 4G/5G)
+const REQUEST_TIMEOUT_PER_ATTEMPT_MS = 28000;
 
 /**
  * Salva uma foto que não pôde ser processada (ex: erro 429 de cota ou sem rede)
@@ -205,7 +205,7 @@ async function callGeminiVision(imageBase64, apiKey) {
   const promptText = `Você lê etiquetas de preço de supermercado brasileiro a partir de uma foto. Responda SOMENTE com JSON válido: descricao (nome completo do produto), preco (número em reais), peso_valor (número ou null), peso_unidade ('g','kg','ml','l','un' ou null), preco_por_kg_ou_l (número ou null), codigo_barras (string ou null), confianca ('alta','media','baixa'). Campo ilegível = null. Nunca invente valores.`;
 
   // Modelos testados no tier grátis em ordem de velocidade e alta cota (Flash-Lite = 1.500/dia)
-  const models = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
+  const models = ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
   let lastErrorMsg = null;
 
   for (const model of models) {

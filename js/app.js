@@ -9,6 +9,7 @@ import {
   renderUI,
   openAddItemModal,
   openListManagerModal,
+  openSettingsModal,
   handleCameraScan,
   renderSyncBadge,
   openSyncModal,
@@ -143,6 +144,14 @@ async function bootstrap() {
  * Configura os ouvintes de clique globais
  */
 function setupEventListeners() {
+  // Botão de Configurações no Header
+  const btnSettings = document.getElementById('btn-header-settings');
+  if (btnSettings) {
+    btnSettings.addEventListener('click', () => {
+      openSettingsModal();
+    });
+  }
+
   // Botão do Histórico de Preços & Comparador no Header (Fase 3)
   const btnHistory = document.getElementById('btn-header-history');
   if (btnHistory) {

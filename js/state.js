@@ -375,6 +375,24 @@ export async function clearCart() {
 }
 
 /**
+ * Remove todos os itens já comprados (pego === true) da lista atual
+ */
+export async function clearTakenItems() {
+  const previous = JSON.parse(JSON.stringify(state.currentList.itens));
+  const count = state.currentList.itens.filter(i => i.pego).length;
+  if (count === 0) return 0;
+
+  state.currentList.itens = state.currentList.itens.filter(i => !i.pego);
+  await persistCurrentList();
+  registerUndo(`${count} itens comprados removidos`, async () => {
+    state.currentList.itens = previous;
+    await persistCurrentList();
+  });
+  notify();
+  return count;
+}
+
+/**
  * Adiciona um item capturado via etiqueta de preço:
  * 1. Grava no histórico de preços (IndexedDB)
  * 2. Adiciona ou atualiza no carrinho da lista atual

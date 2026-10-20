@@ -1520,4 +1520,143 @@ button,
   background: var(--bg-card-hover);
 }
 
+/* --- GESTOS DE SWIPE (ESTILO GMAIL) --- */
+.swipe-item-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  background-color: var(--bg-card);
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.swipe-action-bg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 0 18px;
+  box-sizing: border-box;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  pointer-events: none;
+}
+
+.swipe-action-left {
+  left: 0;
+  background: linear-gradient(90deg, #0284c7, #0369a1);
+  justify-content: flex-start;
+}
+
+.swipe-action-left span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swipe-action-right {
+  right: 0;
+  background: linear-gradient(270deg, #ef4444, #b91c1c);
+  justify-content: flex-end;
+}
+
+.swipe-action-right span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swipe-card {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 0 !important;
+  background: var(--bg-card);
+  will-change: transform;
+}
+
+/* --- TELA / MODAL DE CONFIGURAÇÕES --- */
+.settings-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.settings-section-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-label {
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.settings-desc {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.settings-danger-card {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.btn-settings-action {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.btn-settings-action:active {
+  transform: scale(0.97);
+}
+
+.btn-settings-danger {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+
+.btn-settings-danger:active {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+
 

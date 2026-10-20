@@ -497,3 +497,28 @@ export async function createDefaultListIfEmpty() {
   await setConfig('activeListId', defaultList.id);
   return defaultList;
 }
+
+/**
+ * Zera todo o banco IndexedDB e reinicializa do zero (Reset Geral de Configurações e Dados)
+ */
+export async function resetLocalDatabase() {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    try {
+      const stores = ['listas', 'precos', 'notas', 'config', 'sync_queue'];
+      const tx = db.transaction(stores, 'readwrite');
+      for (const s of stores) {
+        if (db.objectStoreNames.contains(s)) {
+          tx.objectStore(s).clear();
+        }
+      }
+      tx.oncomplete = () => {
+        console.log('[DB] Banco local IndexedDB completamente resetado.');
+        resolve(true);
+      };
+      tx.onerror = (e) => reject(e);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}

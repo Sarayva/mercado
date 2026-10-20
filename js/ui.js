@@ -13,6 +13,7 @@ import {
   returnItemToPending,
   removeItem,
   clearCart,
+  clearTakenItems,
   performUndo,
   setCurrentList,
   addPriceEntryAndCartItem,
@@ -20,7 +21,7 @@ import {
   toggleItemEssential
 } from './state.js';
 
-import { getAllLists, saveList, getConfig, setConfig } from './db.js';
+import { getAllLists, saveList, getConfig, setConfig, getSyncQueue, resetLocalDatabase, createDefaultListIfEmpty } from './db.js';
 import { capturePriceTagPhoto } from './camera.js';
 import { analyzePriceTag } from './vision.js';
 import { getSyncStatus, triggerSync, onSyncStatusChange } from './sync.js';
@@ -403,22 +404,30 @@ function renderShoppingMode(container) {
     const isEss = Boolean(item.essencial);
 
     return `
-      <div class="item-card tap-highlight ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}" data-action="pick">
-        <div class="item-checkbox-wrapper" data-checkbox="true">
-          <div class="item-checkbox">✓</div>
+      <div class="swipe-item-wrapper" data-item-id="${item.id}">
+        <div class="swipe-action-bg swipe-action-left">
+          <span>✏️ Editar</span>
         </div>
-        <div class="item-details">
-          <div class="item-name-row">
-            <span class="item-name">${escapeHTML(item.nome)}</span>
-            ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24; border-color: rgba(245, 158, 11, 0.35);">⭐ Essencial</span>' : ''}
-            ${item.categoria && item.categoria !== 'Geral' ? `<span class="item-category-tag">${escapeHTML(item.categoria)}</span>` : ''}
+        <div class="swipe-action-bg swipe-action-right">
+          <span>🗑️ Excluir</span>
+        </div>
+        <div class="item-card swipe-card tap-highlight ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}" data-action="pick">
+          <div class="item-checkbox-wrapper" data-checkbox="true">
+            <div class="item-checkbox">✓</div>
           </div>
-          <span class="item-subtitle">${qtdText}${precoEstText}</span>
-        </div>
-        <div class="item-price-info" style="display: flex; align-items: center; gap: 4px;">
-          <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
-          <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
-          <span class="item-pick-hint">Pegar ➔</span>
+          <div class="item-details">
+            <div class="item-name-row">
+              <span class="item-name">${escapeHTML(item.nome)}</span>
+              ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24; border-color: rgba(245, 158, 11, 0.35);">⭐ Essencial</span>' : ''}
+              ${item.categoria && item.categoria !== 'Geral' ? `<span class="item-category-tag">${escapeHTML(item.categoria)}</span>` : ''}
+            </div>
+            <span class="item-subtitle">${qtdText}${precoEstText}</span>
+          </div>
+          <div class="item-price-info" style="display: flex; align-items: center; gap: 4px;">
+            <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
+            <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
+            <span class="item-pick-hint">Pegar ➔</span>
+          </div>
         </div>
       </div>
     `;
@@ -491,23 +500,31 @@ function renderShoppingMode(container) {
       const isEss = Boolean(item.essencial);
 
       html += `
-        <div class="item-card taken tap-highlight ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}" data-action="edit-cart">
-          <div class="item-checkbox-wrapper" data-checkbox="true">
-            <div class="item-checkbox">✓</div>
+        <div class="swipe-item-wrapper" data-item-id="${item.id}">
+          <div class="swipe-action-bg swipe-action-left">
+            <span>✏️ Editar</span>
           </div>
-          <div class="item-details">
-            <div class="item-name-row">
-              <span class="item-name">${escapeHTML(item.nome)}</span>
-              ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24;">⭐ Essencial</span>' : ''}
+          <div class="swipe-action-bg swipe-action-right">
+            <span>🗑️ Excluir</span>
+          </div>
+          <div class="item-card swipe-card taken tap-highlight ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}" data-action="edit-cart">
+            <div class="item-checkbox-wrapper" data-checkbox="true">
+              <div class="item-checkbox">✓</div>
             </div>
-            <span class="item-subtitle">${detalhesPreco} • ${escapeHTML(item.mercado || 'Mercado Geral')}</span>
-          </div>
-          <div class="item-price-info" style="display: flex; align-items: center; gap: 4px;">
-            <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
-            <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
-            <div style="text-align: right;">
-              <span class="item-real-total">${formatCurrency(subtotal)}</span>
-              <span class="item-unit-price">${formatCurrency(item.precoReal)}/un</span>
+            <div class="item-details">
+              <div class="item-name-row">
+                <span class="item-name">${escapeHTML(item.nome)}</span>
+                ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24;">⭐ Essencial</span>' : ''}
+              </div>
+              <span class="item-subtitle">${detalhesPreco} • ${escapeHTML(item.mercado || 'Mercado Geral')}</span>
+            </div>
+            <div class="item-price-info" style="display: flex; align-items: center; gap: 4px;">
+              <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
+              <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Ver Histórico de Preços">📊</button>
+              <div style="text-align: right;">
+                <span class="item-real-total">${formatCurrency(subtotal)}</span>
+                <span class="item-unit-price">${formatCurrency(item.precoReal)}/un</span>
+              </div>
             </div>
           </div>
         </div>
@@ -522,6 +539,7 @@ function renderShoppingMode(container) {
   // Ouvintes de clique nos cards do modo Comprando
   container.querySelectorAll('.item-card').forEach(card => {
     card.addEventListener('click', (e) => {
+      if (card.dataset.swiping === 'true') return;
       if (e.target.closest('.btn-history-direct') || e.target.closest('.item-star-btn')) return;
       const itemId = card.dataset.itemId;
       const action = card.dataset.action;
@@ -572,6 +590,9 @@ function renderShoppingMode(container) {
       }
     });
   }
+
+  // Ativa gestos de Swipe (estilo Gmail) nos cards
+  attachSwipeListeners(container);
 }
 
 /**
@@ -599,20 +620,28 @@ function renderPlanningMode(container) {
     const isEss = Boolean(item.essencial);
 
     html += `
-      <div class="item-card ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}">
-        <div class="item-details">
-          <div class="item-name-row">
-            <span class="item-name">${escapeHTML(item.nome)}</span>
-            ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24;">⭐ Essencial</span>' : ''}
-            <span class="item-category-tag">${escapeHTML(item.categoria || 'Geral')}</span>
-          </div>
-          <span class="item-subtitle">${qtdText} • ${precoText}</span>
+      <div class="swipe-item-wrapper" data-item-id="${item.id}">
+        <div class="swipe-action-bg swipe-action-left">
+          <span>✏️ Editar</span>
         </div>
-        <div style="display: flex; gap: 4px; align-items: center;">
-          <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
-          <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Histórico de Preços">📊</button>
-          <button class="action-icon-btn btn-edit-item" data-id="${item.id}" title="Editar">✏️</button>
-          <button class="action-icon-btn btn-delete-item" data-id="${item.id}" style="color: var(--danger);" title="Excluir">🗑️</button>
+        <div class="swipe-action-bg swipe-action-right">
+          <span>🗑️ Excluir</span>
+        </div>
+        <div class="item-card swipe-card ${isEss ? 'is-essential' : ''}" data-item-id="${item.id}">
+          <div class="item-details">
+            <div class="item-name-row">
+              <span class="item-name">${escapeHTML(item.nome)}</span>
+              ${isEss ? '<span class="item-category-tag" style="background: rgba(245, 158, 11, 0.18); color: #fbbf24;">⭐ Essencial</span>' : ''}
+              <span class="item-category-tag">${escapeHTML(item.categoria || 'Geral')}</span>
+            </div>
+            <span class="item-subtitle">${qtdText} • ${precoText}</span>
+          </div>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <button class="item-star-btn ${isEss ? 'active' : ''}" data-star-id="${item.id}" title="${isEss ? 'Item Essencial' : 'Marcar como Essencial'}">${isEss ? '⭐' : '☆'}</button>
+            <button class="action-icon-btn btn-history-direct" data-name="${escapeHTML(item.nome)}" title="Histórico de Preços">📊</button>
+            <button class="action-icon-btn btn-edit-item" data-id="${item.id}" title="Editar">✏️</button>
+            <button class="action-icon-btn btn-delete-item" data-id="${item.id}" style="color: var(--danger);" title="Excluir">🗑️</button>
+          </div>
         </div>
       </div>
     `;
@@ -657,6 +686,148 @@ function renderPlanningMode(container) {
       removeItem(btn.dataset.id);
       showToast('Item removido da lista.');
     });
+  });
+
+  // Ativa gestos de Swipe (estilo Gmail) nos cards
+  attachSwipeListeners(container);
+}
+
+/**
+ * Ativa gestos de deslizar com o dedo (Swipe Actions no estilo Gmail)
+ * - Arrastar para a Direita (> 75px): Editar Item
+ * - Arrastar para a Esquerda (< -75px): Excluir Item (com Desfazer)
+ */
+function attachSwipeListeners(container) {
+  const wrappers = container.querySelectorAll('.swipe-item-wrapper');
+
+  wrappers.forEach(wrapper => {
+    const card = wrapper.querySelector('.swipe-card');
+    const bgLeft = wrapper.querySelector('.swipe-action-left');
+    const bgRight = wrapper.querySelector('.swipe-action-right');
+    const itemId = wrapper.dataset.itemId;
+    if (!card || !itemId) return;
+
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let isDragging = false;
+    let isHorizontal = false;
+    let isVertical = false;
+
+    const onPointerDown = (e) => {
+      // Ignora se o toque começou em botões de ação específicos dentro do card
+      if (e.target.closest('.item-star-btn') || e.target.closest('.btn-history-direct') || e.target.closest('.action-icon-btn')) {
+        return;
+      }
+      startX = e.clientX;
+      startY = e.clientY;
+      currentX = startX;
+      isDragging = false;
+      isHorizontal = false;
+      isVertical = false;
+      card.style.transition = 'none';
+      card.dataset.swiping = 'false';
+    };
+
+    const onPointerMove = (e) => {
+      if (startX === 0 && startY === 0) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      // Trava de direção: decide se é rolagem vertical natural da lista ou arrasto horizontal
+      if (!isHorizontal && !isVertical) {
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 6) {
+          isVertical = true;
+          return;
+        } else if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6) {
+          isHorizontal = true;
+          isDragging = true;
+          card.dataset.swiping = 'true';
+          try {
+            card.setPointerCapture(e.pointerId);
+          } catch (err) {}
+        }
+      }
+
+      if (!isHorizontal) return;
+
+      currentX = e.clientX;
+
+      // Amortecimento de arrasto além do limite
+      let tx = dx;
+      if (Math.abs(dx) > 110) {
+        const excess = Math.abs(dx) - 110;
+        tx = (dx > 0 ? 110 : -110) + (dx > 0 ? 1 : -1) * (excess * 0.25);
+      }
+
+      card.style.transform = `translateX(${tx}px)`;
+
+      // Transparência progressiva dos fundos de ação
+      if (dx > 0) {
+        if (bgLeft) bgLeft.style.opacity = String(Math.min(1, Math.abs(dx) / 50));
+        if (bgRight) bgRight.style.opacity = '0';
+      } else {
+        if (bgRight) bgRight.style.opacity = String(Math.min(1, Math.abs(dx) / 50));
+        if (bgLeft) bgLeft.style.opacity = '0';
+      }
+    };
+
+    const onPointerUp = async (e) => {
+      if (startX === 0 && startY === 0) return;
+      try {
+        card.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+
+      const dx = currentX - startX;
+      const threshold = 75; // Limiar de ativação do gesto
+
+      if (isHorizontal && isDragging) {
+        if (dx > threshold) {
+          // Deslizar para a DIREITA -> EDITAR ITEM
+          triggerHaptic();
+          card.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+          card.style.transform = 'translateX(0)';
+          setTimeout(() => {
+            openEditItemModal(itemId);
+          }, 120);
+        } else if (dx < -threshold) {
+          // Deslizar para a ESQUERDA -> EXCLUIR ITEM
+          triggerHaptic();
+          card.style.transition = 'transform 0.22s ease-out, opacity 0.22s ease-out';
+          card.style.transform = 'translateX(-110%)';
+          card.style.opacity = '0';
+          setTimeout(async () => {
+            await removeItem(itemId);
+          }, 200);
+        } else {
+          // Soltou antes do limite -> volta suavemente para a posição inicial
+          card.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+          card.style.transform = 'translateX(0)';
+        }
+
+        // Evita que o evento de clique comum dispare imediatamente após o término do swipe
+        setTimeout(() => {
+          card.dataset.swiping = 'false';
+        }, 280);
+      } else {
+        card.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        card.style.transform = 'translateX(0)';
+        card.dataset.swiping = 'false';
+      }
+
+      if (bgLeft) bgLeft.style.opacity = '0';
+      if (bgRight) bgRight.style.opacity = '0';
+
+      startX = 0;
+      startY = 0;
+      isHorizontal = false;
+      isDragging = false;
+    };
+
+    card.addEventListener('pointerdown', onPointerDown);
+    card.addEventListener('pointermove', onPointerMove);
+    card.addEventListener('pointerup', onPointerUp);
+    card.addEventListener('pointercancel', onPointerUp);
   });
 }
 
@@ -1287,29 +1458,11 @@ export async function openListManagerModal() {
           </div>
         </div>
 
-        <!-- Configurações da IA de Visão (Google Gemini) -->
+        <!-- Atalho para Configurações Gerais -->
         <div style="border-top: 1px solid var(--border); padding-top: 14px; margin-top: 16px;">
-          <h4 style="font-size: 0.92rem; margin-bottom: 10px; color: var(--text-secondary);">✨ IA de Leitura de Etiquetas (Google Gemini)</h4>
-          
-          <div class="form-group" style="margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
-              <label class="form-label" style="font-size: 0.78rem; margin-bottom: 0;">Chave da API do Google Gemini</label>
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="font-size: 0.75rem; color: var(--primary-light); text-decoration: underline; font-weight: 600;">Gerar Chave Grátis ↗</a>
-            </div>
-            <input type="password" id="input-gemini-key-settings" class="form-input" style="font-size: 0.85rem; padding: 10px 12px; font-family: monospace;" placeholder="Cole sua chave AIzaSy... aqui" value="${escapeHTML(currentGeminiKey)}" />
-            <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 4px;">🔒 Salva apenas no seu aparelho. Gratuita pelo Google AI Studio.</span>
-          </div>
-
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; background: var(--bg); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
-            <div>
-              <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">Simulação Offline de Teste</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">Gera dados fictícios sem chamar a internet</div>
-            </div>
-            <input type="checkbox" id="check-dev-sim" ${isDevSim ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;" />
-          </div>
-
-          <button id="btn-save-vision-config" class="sheet-btn-secondary" style="width: 100%; font-size: 0.88rem; padding: 10px;">
-            Salvar Configurações de IA
+          <button id="btn-open-settings-from-list" class="sheet-btn-secondary" style="width: 100%; font-size: 0.88rem; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <span>⚙️</span>
+            <span>Configurações, Chave IA & Dados</span>
           </button>
         </div>
       </div>
@@ -1322,13 +1475,18 @@ export async function openListManagerModal() {
   const inputNewName = document.getElementById('input-new-list-name');
   const inputNewBudget = document.getElementById('input-new-list-budget');
   const btnOpenReplenish = document.getElementById('btn-open-replenish-modal');
-  const btnSaveVision = document.getElementById('btn-save-vision-config');
-  const inputGeminiKey = document.getElementById('input-gemini-key-settings');
-  const checkDevSim = document.getElementById('check-dev-sim');
+  const btnOpenSettings = document.getElementById('btn-open-settings-from-list');
 
   if (btnOpenReplenish) {
     btnOpenReplenish.addEventListener('click', () => {
       openReplenishmentModal();
+    });
+  }
+
+  if (btnOpenSettings) {
+    btnOpenSettings.addEventListener('click', () => {
+      closeModal();
+      openSettingsModal();
     });
   }
 
@@ -1366,17 +1524,295 @@ export async function openListManagerModal() {
     closeModal();
     showToast(`Nova lista "${nome}" criada!`);
   });
+}
 
-  btnSaveVision.addEventListener('click', async () => {
+/**
+ * Modal: Central de Configurações
+ * Centraliza chaves de API, testes de latência, resets, dados e sincronização
+ */
+export async function openSettingsModal() {
+  triggerHaptic();
+  const currentKey = (await getConfig('geminiApiKey')) || '';
+  const isDevSim = (await getConfig('devVisionSimulation')) === true;
+  const syncQueue = (await getSyncQueue()) || [];
+  const syncStatus = getSyncStatus();
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay" id="sheet-overlay">
+      <div class="bottom-sheet" style="max-height: 90vh;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3 class="sheet-title">⚙️ Configurações</h3>
+            <span class="item-subtitle" style="font-size: 0.8rem;">Preferências, Chave IA e Gerenciamento de Dados</span>
+          </div>
+          <button class="sheet-close-btn" id="btn-close-sheet">✕</button>
+        </div>
+
+        <div style="overflow-y: auto; max-height: calc(90vh - 90px); padding-bottom: 24px;">
+          <!-- 1. INTELIGÊNCIA ARTIFICIAL & CHAVE GEMINI -->
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <span>🤖</span>
+              <span>Inteligência Artificial (Google Gemini)</span>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                <label class="settings-label" style="font-size: 0.8rem;">Chave da API Gemini (Gratuita)</label>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="font-size: 0.75rem; color: var(--primary-light); text-decoration: underline; font-weight: 600;">Gerar Chave no Google ↗</a>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <input type="password" id="settings-gemini-key" class="form-input" style="font-family: monospace; font-size: 0.84rem; flex: 1;" placeholder="Cole sua chave AIzaSy... aqui" value="${escapeHTML(currentKey)}" />
+                <button type="button" id="btn-toggle-key-visibility" class="btn-settings-action" style="padding: 8px 10px;" title="Mostrar/Ocultar Chave">👁️</button>
+              </div>
+              <div id="settings-key-status" style="font-size: 0.74rem; color: ${currentKey ? '#34d399' : '#facc15'}; margin-top: 5px;">
+                ${currentKey ? `✓ Chave ativa: ${currentKey.slice(0, 7)}...${currentKey.slice(-4)}` : '⚠️ Nenhuma chave configurada ainda.'}
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+              <button type="button" id="btn-save-key-settings" class="sheet-btn-primary" style="padding: 8px 14px; font-size: 0.82rem;">
+                Salvar Chave
+              </button>
+              <button type="button" id="btn-test-key-settings" class="btn-settings-action" style="border-color: #38bdf8; color: #38bdf8;">
+                ⚡ Testar Conexão
+              </button>
+              <button type="button" id="btn-clear-key-settings" class="btn-settings-action" style="color: #f87171;">
+                Remover
+              </button>
+            </div>
+
+            <div id="settings-test-result" style="display: none; padding: 8px 12px; border-radius: 6px; font-size: 0.78rem; font-family: monospace; margin-bottom: 10px;"></div>
+
+            <!-- Simulação Offline -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06);">
+              <div>
+                <div class="settings-label" style="font-size: 0.82rem;">Simulação Offline de Teste</div>
+                <div class="settings-desc">Gera dados fictícios instantâneos sem chamar a internet</div>
+              </div>
+              <input type="checkbox" id="settings-check-dev-sim" ${isDevSim ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;" />
+            </div>
+
+            <!-- Laboratório de Diagnósticos -->
+            <div style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px;">
+              <a href="./diagnostico.html" class="btn-settings-action" style="width: 100%; box-sizing: border-box; justify-content: center; text-decoration: none; background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.3); color: #38bdf8; font-weight: 700;">
+                🔬 Abrir Laboratório de Diagnóstico (Etapa 1) ➔
+              </a>
+            </div>
+          </div>
+
+          <!-- 2. GERENCIAMENTO DO CARRINHO & LISTA -->
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <span>🛒</span>
+              <span>Carrinho & Lista de Compras</span>
+            </div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Resetar Carrinho da Lista Atual</div>
+                <div class="settings-desc">Zera os valores reais e volta todos os itens para "A Pegar"</div>
+              </div>
+              <button type="button" id="btn-reset-cart-settings" class="btn-settings-action">
+                Resetar Carrinho
+              </button>
+            </div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Limpar Itens Já Comprados</div>
+                <div class="settings-desc">Remove da lista os itens que já foram marcados como pegos</div>
+              </div>
+              <button type="button" id="btn-clear-taken-settings" class="btn-settings-action">
+                Remover Comprados
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. SINCRONIZAÇÃO & NUVEM -->
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <span>☁️</span>
+              <span>Sincronização & Nuvem (Firebase)</span>
+            </div>
+
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Status da Sincronização</div>
+                <div class="settings-desc">
+                  ${syncStatus && syncStatus.online ? '🟢 Conectado à internet' : '🔴 Modo Offline'}
+                  ${syncQueue.length > 0 ? ` • ${syncQueue.length} alterações na fila` : ' • Fila vazia'}
+                </div>
+              </div>
+              <button type="button" id="btn-open-sync-from-settings" class="btn-settings-action">
+                Configurar Nuvem
+              </button>
+            </div>
+          </div>
+
+          <!-- 4. ZONA DE PERIGO (RESET GERAL DE DADOS) -->
+          <div class="settings-section settings-danger-card">
+            <div class="settings-section-title" style="color: #f87171;">
+              <span>⚠️</span>
+              <span>Zona de Perigo (Reset de Dados)</span>
+            </div>
+
+            <div class="settings-row" style="border-bottom: none;">
+              <div>
+                <div class="settings-label" style="color: #fca5a5;">Zerar Todo o Banco Local</div>
+                <div class="settings-desc">Apaga todas as listas, histórico de preços e recria a lista padrão inicial</div>
+              </div>
+              <button type="button" id="btn-nuclear-reset" class="btn-settings-action btn-settings-danger">
+                Zerar Tudo
+              </button>
+            </div>
+          </div>
+
+          <div style="text-align: center; font-size: 0.74rem; color: var(--text-muted); margin-top: 14px;">
+            Meu Mercado PWA • Versão v20 • Armazenamento Local
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const overlay = document.getElementById('sheet-overlay');
+  const btnClose = document.getElementById('btn-close-sheet');
+  const inputKey = document.getElementById('settings-gemini-key');
+  const btnToggleVis = document.getElementById('btn-toggle-key-visibility');
+  const btnSaveKey = document.getElementById('btn-save-key-settings');
+  const btnTestKey = document.getElementById('btn-test-key-settings');
+  const btnClearKey = document.getElementById('btn-clear-key-settings');
+  const keyStatus = document.getElementById('settings-key-status');
+  const testResult = document.getElementById('settings-test-result');
+  const checkDevSim = document.getElementById('settings-check-dev-sim');
+
+  const btnResetCart = document.getElementById('btn-reset-cart-settings');
+  const btnClearTaken = document.getElementById('btn-clear-taken-settings');
+  const btnOpenSync = document.getElementById('btn-open-sync-from-settings');
+  const btnNuclearReset = document.getElementById('btn-nuclear-reset');
+
+  btnClose.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  // Mostrar / Ocultar Chave
+  btnToggleVis.addEventListener('click', () => {
+    inputKey.type = inputKey.type === 'password' ? 'text' : 'password';
+  });
+
+  // Salvar Chave
+  btnSaveKey.addEventListener('click', async () => {
     triggerHaptic();
-    const key = inputGeminiKey.value.trim();
-    const simEnabled = checkDevSim.checked;
+    const k = inputKey.value.trim();
+    await setConfig('geminiApiKey', k);
+    keyStatus.textContent = k ? `✓ Chave ativa: ${k.slice(0, 7)}...${k.slice(-4)}` : '⚠️ Nenhuma chave configurada ainda.';
+    keyStatus.style.color = k ? '#34d399' : '#facc15';
+    showToast('Chave da API Gemini salva com sucesso!');
+  });
 
-    await setConfig('geminiApiKey', key);
-    await setConfig('devVisionSimulation', simEnabled);
+  // Testar Conexão da Chave em Tempo Real
+  btnTestKey.addEventListener('click', async () => {
+    triggerHaptic();
+    const k = inputKey.value.trim();
+    if (!k) {
+      showToast('Insira uma chave antes de testar.');
+      return;
+    }
 
-    showToast(simEnabled ? 'Simulação ativada!' : (key ? 'Chave do Gemini salva com sucesso!' : 'Configurações de IA salvas!'));
+    testResult.style.display = 'block';
+    testResult.style.background = '#1e293b';
+    testResult.style.color = '#38bdf8';
+    testResult.textContent = '⏳ Testando conexão com a Google Gemini API...';
+
+    const t0 = performance.now();
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(k)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] })
+      });
+      const elapsed = Math.round(performance.now() - t0);
+
+      if (res.ok) {
+        testResult.style.background = 'rgba(52, 211, 153, 0.15)';
+        testResult.style.color = '#34d399';
+        testResult.textContent = `✓ Conexão bem-sucedida em ${elapsed} ms! A chave está ativa e pronta para leitura.`;
+      } else {
+        const errTxt = await res.text();
+        let msg = errTxt;
+        try {
+          const errObj = JSON.parse(errTxt);
+          msg = errObj.error?.message || errTxt;
+        } catch (e) {}
+        testResult.style.background = 'rgba(239, 68, 68, 0.15)';
+        testResult.style.color = '#fca5a5';
+        testResult.textContent = `Erro HTTP ${res.status}: ${msg}`;
+      }
+    } catch (netErr) {
+      testResult.style.background = 'rgba(239, 68, 68, 0.15)';
+      testResult.style.color = '#fca5a5';
+      testResult.textContent = `Falha de rede ao testar: ${netErr.message}`;
+    }
+  });
+
+  // Remover Chave
+  btnClearKey.addEventListener('click', async () => {
+    triggerHaptic();
+    inputKey.value = '';
+    await setConfig('geminiApiKey', '');
+    keyStatus.textContent = '⚠️ Nenhuma chave configurada ainda.';
+    keyStatus.style.color = '#facc15';
+    testResult.style.display = 'none';
+    showToast('Chave da API removida.');
+  });
+
+  // Toggle Dev Simulation
+  checkDevSim.addEventListener('change', async () => {
+    await setConfig('devVisionSimulation', checkDevSim.checked);
+    showToast(checkDevSim.checked ? 'Modo de simulação ativado.' : 'Modo de simulação desativado.');
+  });
+
+  // Reset Carrinho
+  btnResetCart.addEventListener('click', async () => {
+    triggerHaptic();
+    await clearCart();
     closeModal();
+    showToast('Carrinho resetado! Todos os itens voltaram para A Pegar.');
+  });
+
+  // Limpar Comprados
+  btnClearTaken.addEventListener('click', async () => {
+    triggerHaptic();
+    const count = await clearTakenItems();
+    closeModal();
+    if (count > 0) {
+      showToast(`${count} itens comprados foram removidos da lista.`);
+    } else {
+      showToast('Nenhum item comprado no carrinho para remover.');
+    }
+  });
+
+  // Abrir Nuvem
+  btnOpenSync.addEventListener('click', () => {
+    closeModal();
+    openSyncModal();
+  });
+
+  // Reset Nuclear (Zerar Tudo)
+  btnNuclearReset.addEventListener('click', async () => {
+    triggerHaptic();
+    const conf1 = confirm('ATENÇÃO: Deseja apagar TODOS os dados locais (todas as listas, histórico de preços e configurações) e restaurar o app padrão?');
+    if (!conf1) return;
+
+    await resetLocalDatabase();
+    const defaultList = await createDefaultListIfEmpty();
+    setCurrentList(defaultList);
+    closeModal();
+    showToast('App resetado! Banco zerado e dados restaurados para o padrão.');
   });
 }
 

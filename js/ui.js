@@ -47,6 +47,15 @@ export function formatCurrency(value) {
   });
 }
 
+// Converte texto digitado com vírgula ou ponto (ex: 6,50 ou 6.50) em float seguro
+export function parseDecimal(val, defaultVal = 0) {
+  if (val === null || val === undefined) return defaultVal;
+  if (typeof val === 'number') return isNaN(val) ? defaultVal : val;
+  const cleaned = String(val).trim().replace(',', '.');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? defaultVal : num;
+}
+
 // Utilitário para escapar HTML contra XSS
 function escapeHTML(str) {
   if (!str) return '';
@@ -262,13 +271,12 @@ export function openBudgetModal() {
             <div class="big-price-input-wrapper">
               <span class="currency-prefix">R$</span>
               <input 
-                type="number" 
-                step="0.01" 
+                type="text" 
                 inputmode="decimal" 
                 id="input-budget-value" 
                 class="form-input big-price-input" 
                 placeholder="600,00"
-                value="${currentBudget > 0 ? currentBudget.toFixed(2) : ''}"
+                value="${currentBudget > 0 ? currentBudget.toFixed(2).replace('.', ',') : ''}"
                 autofocus
               />
             </div>
@@ -302,15 +310,15 @@ export function openBudgetModal() {
   modalContainer.querySelectorAll('.btn-quick-budget').forEach(btn => {
     btn.addEventListener('click', () => {
       triggerHaptic();
-      const val = parseFloat(btn.dataset.val) || 0;
-      inputBudget.value = val > 0 ? val.toFixed(2) : '';
+      const val = parseDecimal(btn.dataset.val);
+      inputBudget.value = val > 0 ? val.toFixed(2).replace('.', ',') : '';
     });
   });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     triggerHaptic();
-    const val = parseFloat(inputBudget.value) || 0;
+    const val = parseDecimal(inputBudget.value);
     await setListBudget(val);
     closeModal();
     if (val > 0) {
@@ -675,7 +683,9 @@ export async function openCartSheet(itemId, isEditing = false) {
   if (!item) return;
 
   let initialQtd = isEditing ? (item.qtdReal || item.qtdPlanejada || 1) : (item.qtdPlanejada || 1);
-  let initialPrice = isEditing ? (item.precoReal || '') : (item.precoEstimado ? item.precoEstimado.toFixed(2) : '');
+  let initialPrice = isEditing 
+    ? (item.precoReal ? String(item.precoReal).replace('.', ',') : '') 
+    : (item.precoEstimado ? item.precoEstimado.toFixed(2).replace('.', ',') : '');
 
   // Busca dados de histórico de preços para conferência na gôndola
   const stats = await getProductPriceStats(item.nome);
@@ -715,8 +725,7 @@ export async function openCartSheet(itemId, isEditing = false) {
           <div class="big-price-input-wrapper">
             <span class="currency-prefix">R$</span>
             <input 
-              type="number" 
-              step="0.01" 
+              type="text" 
               inputmode="decimal" 
               id="sheet-preco-real" 
               class="form-input big-price-input" 
@@ -752,7 +761,7 @@ export async function openCartSheet(itemId, isEditing = false) {
           <label class="form-label">Quantidade Levada</label>
           <div class="quantity-stepper">
             <button type="button" class="stepper-btn" id="btn-qtd-minus">−</button>
-            <input type="number" step="any" min="0.1" id="sheet-qtd-real" class="stepper-input" value="${initialQtd}">
+            <input type="text" inputmode="decimal" id="sheet-qtd-real" class="stepper-input" value="${initialQtd}">
             <button type="button" class="stepper-btn" id="btn-qtd-plus">+</button>
           </div>
         </div>
@@ -808,8 +817,8 @@ export async function openCartSheet(itemId, isEditing = false) {
   }
 
   function updateSheetSubtotal() {
-    const p = parseFloat(inputPreco.value) || 0;
-    const q = parseFloat(inputQtd.value) || 0;
+    const p = parseDecimal(inputPreco.value);
+    const q = parseDecimal(inputQtd.value, 1);
     const tot = p * q;
     subtotalCalc.textContent = `${q} x ${formatCurrency(p)}`;
     subtotalVal.textContent = formatCurrency(tot);
@@ -820,7 +829,7 @@ export async function openCartSheet(itemId, isEditing = false) {
   // Comparação com mês anterior em tempo real
   let debounceMonthlyTimer = null;
   async function checkMonthlyComp() {
-    const p = parseFloat(inputPreco.value) || 0;
+    const p = parseDecimal(inputPreco.value);
     if (p > 0) {
       const comp = await getMonthlyComparison(item.nome, p);
       if (comp && comp.encontrado && monthlyCompEl) {
@@ -854,7 +863,7 @@ export async function openCartSheet(itemId, isEditing = false) {
 
   btnMinus.addEventListener('click', () => {
     triggerHaptic();
-    let current = parseFloat(inputQtd.value) || 1;
+    let current = parseDecimal(inputQtd.value, 1);
     if (current > 1) {
       inputQtd.value = current - 1;
     } else if (current > 0.1) {
@@ -865,15 +874,15 @@ export async function openCartSheet(itemId, isEditing = false) {
 
   btnPlus.addEventListener('click', () => {
     triggerHaptic();
-    let current = parseFloat(inputQtd.value) || 0;
+    let current = parseDecimal(inputQtd.value, 0);
     inputQtd.value = current + 1;
     updateSheetSubtotal();
   });
 
   btnConfirm.addEventListener('click', async () => {
     triggerHaptic();
-    const preco = parseFloat(inputPreco.value) || 0;
-    const qtd = parseFloat(inputQtd.value) || 1;
+    const preco = parseDecimal(inputPreco.value);
+    const qtd = parseDecimal(inputQtd.value, 1);
     const mercado = (inputMercado ? inputMercado.value.trim() : '') || 'Mercado Geral';
     const isEss = Boolean(inputEssential?.checked);
 
@@ -953,7 +962,7 @@ export async function openAddItemModal() {
               <label class="form-label">Quantidade</label>
               <div class="quantity-stepper">
                 <button type="button" class="stepper-btn" id="btn-add-minus">−</button>
-                <input type="number" step="any" min="0.1" id="input-item-qtd" class="stepper-input" value="1">
+                <input type="text" inputmode="decimal" id="input-item-qtd" class="stepper-input" value="1">
                 <button type="button" class="stepper-btn" id="btn-add-plus">+</button>
               </div>
             </div>
@@ -962,7 +971,7 @@ export async function openAddItemModal() {
               <label class="form-label">Preço Estimado</label>
               <div class="big-price-input-wrapper">
                 <span class="currency-prefix" style="font-size: 0.95rem; left: 10px;">R$</span>
-                <input type="number" step="0.01" inputmode="decimal" id="input-item-price-est" class="form-input" style="padding-left: 36px;" placeholder="0,00" />
+                <input type="text" inputmode="decimal" id="input-item-price-est" class="form-input" style="padding-left: 36px;" placeholder="0,00" />
               </div>
             </div>
           </div>
@@ -1038,13 +1047,13 @@ export async function openAddItemModal() {
 
   btnMinus.addEventListener('click', () => {
     triggerHaptic();
-    let val = parseFloat(inputQtd.value) || 1;
+    let val = parseDecimal(inputQtd.value, 1);
     if (val > 1) inputQtd.value = val - 1;
   });
 
   btnPlus.addEventListener('click', () => {
     triggerHaptic();
-    let val = parseFloat(inputQtd.value) || 0;
+    let val = parseDecimal(inputQtd.value, 0);
     inputQtd.value = val + 1;
   });
 
@@ -1054,8 +1063,8 @@ export async function openAddItemModal() {
     const nome = inputName.value.trim();
     if (!nome) return;
 
-    const qtd = parseFloat(inputQtd.value) || 1;
-    const preco = parseFloat(inputPrice.value) || 0;
+    const qtd = parseDecimal(inputQtd.value, 1);
+    const preco = parseDecimal(inputPrice.value);
     const essencial = Boolean(inputEssential?.checked);
 
     await addItem({
@@ -1125,14 +1134,14 @@ export async function openEditItemModal(itemId) {
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
               <label class="form-label">Quantidade</label>
-              <input type="number" step="any" min="0.1" id="input-edit-qtd" class="form-input" value="${item.qtdPlanejada || 1}" />
+              <input type="text" inputmode="decimal" id="input-edit-qtd" class="form-input" value="${item.qtdPlanejada || 1}" />
             </div>
 
             <div class="form-group">
               <label class="form-label">Preço Estimado</label>
               <div class="big-price-input-wrapper">
                 <span class="currency-prefix" style="font-size: 0.95rem; left: 10px;">R$</span>
-                <input type="number" step="0.01" inputmode="decimal" id="input-edit-price" class="form-input" style="padding-left: 36px;" value="${item.precoEstimado || ''}" />
+                <input type="text" inputmode="decimal" id="input-edit-price" class="form-input" style="padding-left: 36px;" value="${item.precoEstimado ? String(item.precoEstimado).replace('.', ',') : ''}" />
               </div>
             </div>
           </div>
@@ -1200,8 +1209,8 @@ export async function openEditItemModal(itemId) {
     await updateItem(itemId, {
       nome: inputName.value.trim(),
       categoria: selectedCategory,
-      qtdPlanejada: parseFloat(inputQtd.value) || 1,
-      precoEstimado: parseFloat(inputPrice.value) || 0,
+      qtdPlanejada: parseDecimal(inputQtd.value, 1),
+      precoEstimado: parseDecimal(inputPrice.value),
       essencial
     });
     closeModal();
@@ -1269,7 +1278,7 @@ export async function openListManagerModal() {
             <div style="display: flex; gap: 8px;">
               <div class="big-price-input-wrapper" style="flex: 1;">
                 <span class="currency-prefix" style="font-size: 0.88rem; left: 10px;">R$</span>
-                <input type="number" step="0.01" inputmode="decimal" id="input-new-list-budget" class="form-input" style="padding-left: 36px; font-size: 0.9rem;" placeholder="Teto / Orçamento (opcional: 600,00)" />
+                <input type="text" inputmode="decimal" id="input-new-list-budget" class="form-input" style="padding-left: 36px; font-size: 0.9rem;" placeholder="Teto / Orçamento (opcional: 600,00)" />
               </div>
               <button id="btn-create-list" class="sheet-btn-primary" style="white-space: nowrap; padding: 0 18px;">
                 Criar Lista
@@ -1341,7 +1350,7 @@ export async function openListManagerModal() {
     const nome = inputNewName.value.trim();
     if (!nome) return;
     triggerHaptic();
-    const budgetVal = parseFloat(inputNewBudget?.value) || 0;
+    const budgetVal = parseDecimal(inputNewBudget?.value);
 
     const newList = {
       id: 'lista_' + Date.now(),
@@ -1737,8 +1746,8 @@ async function proceedWithCameraScan() {
       <div class="modal-overlay">
         <div style="background: var(--bg-card); padding: 28px 20px; border-radius: var(--radius-lg); text-align: center; border: 1px solid var(--border); max-width: 320px; width: 88%; box-shadow: 0 10px 30px rgba(0,0,0,0.7);">
           <div class="scanning-spinner"></div>
-          <h4 style="margin-top: 16px; font-size: 1.15rem; color: var(--text-primary);">Lendo Etiqueta com IA...</h4>
-          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">O Google Gemini está identificando produto, preço e peso.</p>
+          <h4 style="margin-top: 16px; font-size: 1.15rem; color: var(--text-primary);">Lendo Etiqueta...</h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">Identificando produto, preço e peso automaticamente...</p>
         </div>
       </div>
     `;
@@ -1792,7 +1801,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
             <h3 class="sheet-title">Confirmar Produto</h3>
             <span class="item-subtitle" style="font-size: 0.8rem;">
               ${extracted.sucesso && confiancaPct >= 80 
-                ? `✓ Lido por IA Gemini (${confiancaPct}% de confiança)` 
+                ? `✓ Identificado automaticamente (${confiancaPct}% de precisão)` 
                 : 'Verifique e ajuste os dados da etiqueta'}
             </span>
           </div>
@@ -1832,12 +1841,11 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
             <div class="big-price-input-wrapper">
               <span class="currency-prefix">R$</span>
               <input 
-                type="number" 
-                step="0.01" 
+                type="text" 
                 inputmode="decimal" 
                 id="confirm-item-price" 
                 class="form-input big-price-input" 
-                value="${precoUnit > 0 ? precoUnit.toFixed(2) : ''}" 
+                value="${precoUnit > 0 ? precoUnit.toFixed(2).replace('.', ',') : ''}" 
                 placeholder="0,00"
                 required
               />
@@ -1850,7 +1858,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
             <label class="form-label">Quantidade Levada</label>
             <div class="quantity-stepper">
               <button type="button" class="stepper-btn" id="btn-confirm-minus">−</button>
-              <input type="number" step="any" min="0.1" id="confirm-item-qtd" class="stepper-input" value="1">
+              <input type="text" inputmode="decimal" id="confirm-item-qtd" class="stepper-input" value="1">
               <button type="button" class="stepper-btn" id="btn-confirm-plus">+</button>
             </div>
           </div>
@@ -1921,8 +1929,8 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
   const form = document.getElementById('form-confirm-label');
 
   function updateConfirmSubtotal() {
-    const p = parseFloat(inputPrice.value) || 0;
-    const q = parseFloat(inputQtd.value) || 0;
+    const p = parseDecimal(inputPrice.value);
+    const q = parseDecimal(inputQtd.value, 1);
     subtotalCalc.textContent = `${q} x ${formatCurrency(p)}`;
     subtotalVal.textContent = formatCurrency(p * q);
   }
@@ -1930,7 +1938,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
   // Comparação com mês anterior para etiquetas lidas
   let confirmMonthlyTimer = null;
   async function updateConfirmMonthly() {
-    const p = parseFloat(inputPrice.value) || 0;
+    const p = parseDecimal(inputPrice.value);
     const n = inputName.value.trim();
     if (p > 0 && n) {
       const comp = await getMonthlyComparison(n, p);
@@ -1971,7 +1979,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
 
   btnMinus.addEventListener('click', () => {
     triggerHaptic();
-    let current = parseFloat(inputQtd.value) || 1;
+    let current = parseDecimal(inputQtd.value, 1);
     if (current > 1) {
       inputQtd.value = current - 1;
     } else if (current > 0.1) {
@@ -1982,7 +1990,7 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
 
   btnPlus.addEventListener('click', () => {
     triggerHaptic();
-    let current = parseFloat(inputQtd.value) || 0;
+    let current = parseDecimal(inputQtd.value, 0);
     inputQtd.value = current + 1;
     updateConfirmSubtotal();
   });
@@ -1996,8 +2004,8 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
     triggerHaptic();
 
     const nome = inputName.value.trim();
-    const preco = parseFloat(inputPrice.value) || 0;
-    const quantidade = parseFloat(inputQtd.value) || 1;
+    const preco = parseDecimal(inputPrice.value);
+    const quantidade = parseDecimal(inputQtd.value, 1);
     const peso = inputPeso.value.trim();
     const precoPorKgLitro = inputRate.value.trim();
     const mercado = inputMercado.value.trim();
@@ -2034,8 +2042,8 @@ export function openLabelConfirmSheet(extracted, photoDataUrl) {
         <div class="modal-overlay">
           <div style="background: var(--bg-card); padding: 28px 20px; border-radius: var(--radius-lg); text-align: center; border: 1px solid var(--border); max-width: 320px; width: 88%; box-shadow: 0 10px 30px rgba(0,0,0,0.7);">
             <div class="scanning-spinner"></div>
-            <h4 style="margin-top: 16px; font-size: 1.15rem; color: var(--text-primary);">Lendo Etiqueta com IA...</h4>
-            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">Reprocessando foto com Google Gemini.</p>
+            <h4 style="margin-top: 16px; font-size: 1.15rem; color: var(--text-primary);">Lendo Etiqueta...</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">Identificando produto, preço e peso automaticamente...</p>
           </div>
         </div>
       `;

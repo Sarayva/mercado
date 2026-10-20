@@ -59,22 +59,20 @@ async function callGeminiVision(imageBase64, apiKey) {
     if (extractedMime) mimeType = extractedMime;
   }
 
-  const promptText = `Você é um leitor óptico especialista em etiquetas de preços de supermercados brasileiros.
-Analise com extrema atenção a foto da etiqueta anexada e extraia as informações estritamente em formato JSON:
+  const promptText = `Extraia os dados da etiqueta ou cartaz de supermercado estritamente em formato JSON:
 {
-  "nome": "Nome comercial legível e completo do produto",
+  "nome": "Nome legível do produto",
   "preco": 0.00,
-  "peso": "Peso ou volume (ex: 5kg, 1kg, 500g, 1L, 900ml) se constar na etiqueta",
+  "peso": "Peso ou volume se houver (ex: 5kg, 1kg, 500g, 1L)",
   "unidade": "un ou kg",
-  "precoPorKgLitro": "Preço fracionado por kg ou litro se houver (ex: R$ 5,90/kg)",
-  "mercado": "Nome do supermercado se impresso na etiqueta",
+  "precoPorKgLitro": "Preço fracionado por kg/litro se houver",
+  "mercado": "Nome do mercado se impresso",
   "confianca": 0.95
 }
-Regras obrigatórias:
-1. O campo 'preco' DEVE ser SEMPRE um número decimal com ponto (float, ex: 24.90 para R$ 24,90). NUNCA envie vírgula nem símbolo 'R$' no campo 'preco'.
-2. Se houver preço normal e preço de Clube / Cartão / Promoção / Atacado, envie no 'preco' o menor preço visível em destaque.
-3. Se o nome estiver abreviado na etiqueta (ex: 'ARROZ T1 5KG'), converta para o nome usual legível ('Arroz Tipo 1 5kg').
-4. Se algum dado não estiver legível na etiqueta, envie como string vazia "".`;
+Regras:
+1. 'preco' DEVE ser SEMPRE um número float com ponto (ex: 6.50 para R$ 6,50). Sem R$ ou vírgula.
+2. Em cartazes de OFERTA ou promoção, envie o menor preço em destaque.
+3. Se algum campo não estiver visível, envie string vazia "".`;
 
   const payload = {
     contents: [
@@ -92,7 +90,8 @@ Regras obrigatórias:
     ],
     generationConfig: {
       responseMimeType: 'application/json',
-      temperature: 0.1
+      temperature: 0.1,
+      maxOutputTokens: 140
     }
   };
 

@@ -26,8 +26,8 @@ export function capturePriceTagPhoto() {
       }
 
       try {
-        // Redimensiona e comprime a foto para enviar ultra-rápido para a IA (~40KB - 80KB)
-        const compressedDataUrl = await compressImageFile(file, 800, 0.75);
+        // Redimensiona e comprime a foto para envio instantâneo para a IA (~15KB - 30KB)
+        const compressedDataUrl = await compressImageFile(file, 640, 0.65);
         input.remove();
         resolve({
           file,
@@ -58,7 +58,7 @@ export function capturePriceTagPhoto() {
  * Comprime e redimensiona um arquivo de imagem via Canvas HTML5
  * Evita enviar fotos pesadas de 5MB do celular para a nuvem
  */
-function compressImageFile(file, maxDimension = 800, quality = 0.75) {
+function compressImageFile(file, maxDimension = 640, quality = 0.65) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 

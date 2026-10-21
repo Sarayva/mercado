@@ -837,6 +837,22 @@ function attachSwipeListeners(container) {
 
 const modalContainer = document.getElementById('modal-container');
 
+// Ouvinte global delegado: garante fechamento em 100% dos modais via botão ✕ ou clique fora
+if (modalContainer) {
+  modalContainer.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-close-sheet') || e.target.closest('.sheet-close-btn')) {
+      triggerHaptic();
+      closeModal();
+      return;
+    }
+    if (e.target.classList.contains('modal-overlay')) {
+      triggerHaptic();
+      closeModal();
+      return;
+    }
+  });
+}
+
 /**
  * Fecha qualquer modal aberto
  */
@@ -1476,6 +1492,19 @@ export async function openListManagerModal() {
   const inputNewBudget = document.getElementById('input-new-list-budget');
   const btnOpenReplenish = document.getElementById('btn-open-replenish-modal');
   const btnOpenSettings = document.getElementById('btn-open-settings-from-list');
+
+  if (btnClose) {
+    btnClose.addEventListener('click', () => {
+      triggerHaptic();
+      closeModal();
+    });
+  }
+
+  if (overlay) {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+  }
 
   if (btnOpenReplenish) {
     btnOpenReplenish.addEventListener('click', () => {

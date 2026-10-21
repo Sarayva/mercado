@@ -14,7 +14,6 @@ import {
   renderSyncBadge,
   openSyncModal,
   openPriceHistoryCatalogModal,
-  showToast,
   initTheme,
   toggleTheme
 } from './ui.js';
@@ -65,7 +64,6 @@ async function bootstrap() {
         const newQuery = urlParams.toString();
         const newUrl = window.location.pathname + (newQuery ? '?' + newQuery : '') + window.location.hash;
         window.history.replaceState({}, '', newUrl);
-        setTimeout(() => showToast('✨ Chave da IA Gemini ativada no seu aparelho!'), 400);
       }
     } catch (paramErr) {
       console.warn('[App] Erro ao ler parâmetro de chave da URL:', paramErr);

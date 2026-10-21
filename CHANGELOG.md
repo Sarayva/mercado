@@ -15,7 +15,11 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - **Prevenção de FOUC**: Script de pré-renderização no `<head>` para inicialização imediata do tema a partir do `localStorage` sem cintilação de tela.
 - **Sincronização de Status Bar Mobile**: Atualização dinâmica da tag `<meta name="theme-color">` conforme o tema ativo (`#202020` no escuro e `#f3f3f3` no claro).
 
+### Removido
+- Removido toast invasivo de ativação de chave Gemini na inicialização da aplicação.
+- Removido balão de aviso toast ao alternar entre Modo Claro e Modo Escuro (transição puramente visual e tátil).
+
 ### Alterado
 - Cabeçalho superior despoluído: remoção do link redundante de diagnóstico `🔬` e transferência das abas de modo para a barra inferior, eliminando qualquer corte horizontal de texto.
-- Cache do Service Worker atualizado para `mercado-pwa-v23`.
+- Cache do Service Worker atualizado para `mercado-pwa-v24`.
 - Tipografia unificada com fontes modernas do ecossistema Fluent (`'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui`).

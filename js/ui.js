@@ -3273,7 +3273,7 @@ export function applyTheme(theme) {
 }
 
 /**
- * Alterna entre Modo Claro e Modo Escuro com vibração tátil e feedback toast
+ * Alterna entre Modo Claro e Modo Escuro com vibração tátil imediata
  * @returns {string} Novo tema ativo
  */
 export function toggleTheme() {
@@ -3281,7 +3281,6 @@ export function toggleTheme() {
   const current = getCurrentTheme();
   const next = current === 'light' ? 'dark' : 'light';
   applyTheme(next);
-  showToast(next === 'light' ? '☀️ Modo Claro ativado' : '🌙 Modo Escuro ativado', 'info', 1600);
   return next;
 }
 

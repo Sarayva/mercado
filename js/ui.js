@@ -336,7 +336,7 @@ export function openBudgetModal() {
 }
 
 /**
- * Renderiza o Seletor de Modo (Segmented Control no Header)
+ * Renderiza o Seletor de Modo (Barra de Navegação Inferior)
  */
 export function renderModeSwitcher() {
   const tabComprando = document.getElementById('tab-mode-comprando');
@@ -346,9 +346,13 @@ export function renderModeSwitcher() {
     if (state.mode === 'comprando') {
       tabComprando.classList.add('active');
       tabPlanejando.classList.remove('active');
+      tabComprando.setAttribute('aria-selected', 'true');
+      tabPlanejando.setAttribute('aria-selected', 'false');
     } else {
       tabComprando.classList.remove('active');
       tabPlanejando.classList.add('active');
+      tabComprando.setAttribute('aria-selected', 'false');
+      tabPlanejando.setAttribute('aria-selected', 'true');
     }
   }
 }

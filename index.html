@@ -66,7 +66,7 @@
     <!-- HEADER FIXO SLIM NO TOPO -->
     <header class="sticky-header">
       <div class="header-inner">
-        <!-- Linha 1: Lista Ativa + Seletor de Modo Compacto -->
+        <!-- Linha 1: Lista Ativa + Ações Rápidas -->
         <div class="header-top-row">
           <button id="header-list-select-btn" class="list-chip-btn" title="Trocar ou criar lista">
             <span>📋</span>
@@ -74,32 +74,18 @@
             <span class="chip-arrow">▼</span>
           </button>
 
-          <div style="display: flex; align-items: center; gap: 6px;">
+          <div class="header-actions-group">
             <button id="btn-theme-toggle" class="header-icon-action-btn" title="Alternar Modo Claro / Escuro" type="button">
               <span id="theme-icon">🌙</span>
             </button>
-
-            <button id="btn-header-settings" class="header-icon-action-btn" title="Configurações e Chaves" type="button">
-              <span>⚙️</span>
-            </button>
-
-            <a href="./diagnostico.html" class="header-icon-action-btn" title="Diagnóstico de Leitura (Etapa 1)" style="text-decoration:none; display:flex; align-items:center; justify-content:center;">
-              <span>🔬</span>
-            </a>
 
             <button id="btn-header-history" class="header-icon-action-btn" title="Histórico de Preços e Comparador" type="button">
               <span>📊</span>
             </button>
 
-            <!-- Segmented Control de Modos (Sempre visível no topo com 1 toque) -->
-            <div class="segmented-control">
-              <button id="tab-mode-comprando" class="segmented-btn active">
-                🛒 Comprando
-              </button>
-              <button id="tab-mode-planejando" class="segmented-btn">
-                📝 Lista
-              </button>
-            </div>
+            <button id="btn-header-settings" class="header-icon-action-btn" title="Configurações e Chaves" type="button">
+              <span>⚙️</span>
+            </button>
           </div>
         </div>
 
@@ -153,18 +139,30 @@
       <div id="list-content-container"></div>
     </main>
 
-    <!-- BOTÕES FLUTUANTES INFERIORES (FOTO DA ETIQUETA + NOVO ITEM) -->
-    <div class="floating-bottom-bar">
-      <button id="btn-camera-bottom" class="btn-floating-action btn-camera-action" title="Tirar foto da etiqueta com IA">
-        <span style="font-size: 1.15rem; line-height: 1;">📷</span>
-        <span>Foto Etiqueta</span>
+    <!-- BARRA INFERIOR UNIFICADA (BOTTOM NAVIGATION BAR ERGONÔMICA) -->
+    <nav class="bottom-nav-bar" aria-label="Navegação e Ações Rápidas">
+      <button id="tab-mode-comprando" class="bottom-nav-item active" type="button" title="Modo Comprando no Mercado">
+        <span class="bottom-nav-icon">🛒</span>
+        <span class="bottom-nav-label">Comprando</span>
       </button>
 
-      <button id="btn-add-item-bottom" class="btn-floating-action btn-manual-action" title="Adicionar item manualmente">
-        <span style="font-size: 1.25rem; line-height: 1;">+</span>
-        <span>Item</span>
+      <button id="btn-camera-bottom" class="bottom-nav-btn-center" type="button" title="Tirar foto da etiqueta com IA">
+        <span class="center-btn-circle">
+          <span class="center-btn-icon">📷</span>
+        </span>
+        <span class="bottom-nav-label">Foto IA</span>
       </button>
-    </div>
+
+      <button id="btn-add-item-bottom" class="bottom-nav-item" type="button" title="Adicionar item manualmente">
+        <span class="bottom-nav-icon">➕</span>
+        <span class="bottom-nav-label">Novo Item</span>
+      </button>
+
+      <button id="tab-mode-planejando" class="bottom-nav-item" type="button" title="Modo Planejando Lista">
+        <span class="bottom-nav-icon">📝</span>
+        <span class="bottom-nav-label">Lista</span>
+      </button>
+    </nav>
 
     <!-- CONTAINER DE NOTIFICAÇÕES (TOAST COM "DESFAZER") -->
     <div id="toast-container" class="toast-container"></div>

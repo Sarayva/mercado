@@ -203,12 +203,13 @@ input, textarea {
   gap: 8px;
 }
 
-/* Linha 1: Seletor de Lista + Segmented Control de Modos */
+/* Linha 1: Seletor de Lista + Ações Globais */
 .header-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  width: 100%;
 }
 
 .list-chip-btn {
@@ -223,8 +224,9 @@ input, textarea {
   padding: 6px 12px;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  max-width: 48vw;
+  max-width: calc(100vw - 140px);
   min-height: 34px;
+  flex-shrink: 1;
 }
 
 .list-chip-btn:active {
@@ -240,6 +242,13 @@ input, textarea {
 .chip-arrow {
   font-size: 0.68rem;
   color: var(--text-muted);
+}
+
+.header-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* Segmented Control (Tabs compactas estilo iOS) */
@@ -475,9 +484,10 @@ input, textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 6px 4px 2px 4px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  border-top: 1px dashed var(--border-subtle);
   margin-top: 2px;
 }
 
@@ -928,51 +938,122 @@ input, textarea {
   opacity: 0.7;
 }
 
-/* --- BOTÃƒO FLUTUANTE INFERIOR (FLOATING ACTION BUTTON) --- */
-.floating-bottom-bar {
+/* --- BARRA DE NAVEGAÇÃO E AÇÕES INFERIOR UNIFICADA (MOBILE-FIRST) --- */
+.bottom-nav-bar {
   position: fixed;
-  bottom: calc(var(--safe-bottom) + 14px);
+  bottom: 0;
   left: 0;
   right: 0;
-  z-index: 90;
+  height: calc(58px + var(--safe-bottom));
+  background: var(--bg-header);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
   display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 95;
+  padding: 4px 8px var(--safe-bottom) 8px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.25);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  pointer-events: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 4px 2px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: var(--radius-sm);
+  min-height: 48px;
 }
 
-.btn-floating-action {
-  pointer-events: auto;
-  border-radius: var(--radius-pill);
-  padding: 10px 18px;
-  font-size: 0.92rem;
+.bottom-nav-item:active {
+  transform: scale(0.92);
+  background: var(--bg-elevated);
+}
+
+.bottom-nav-item.active {
+  color: var(--primary);
+}
+
+.bottom-nav-icon {
+  font-size: 1.25rem;
+  line-height: 1.1;
+  margin-bottom: 2px;
+  transition: transform 0.15s ease;
+}
+
+.bottom-nav-item.active .bottom-nav-icon {
+  transform: scale(1.12);
+}
+
+.bottom-nav-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.bottom-nav-item.active .bottom-nav-label {
   font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Botão Central Elevado (Foto IA da Etiqueta) */
+.bottom-nav-btn-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  outline: none;
   cursor: pointer;
+  position: relative;
+  top: -10px;
+  padding: 0 4px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.center-btn-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--success), var(--success-dark));
+  box-shadow: 0 4px 14px var(--success-bg), 0 2px 8px rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 46px;
-  transition: transform 0.1s ease;
+  justify-content: center;
+  transition: all 0.15s ease;
+  border: 2px solid var(--bg);
 }
 
-.btn-floating-action:active {
-  transform: scale(0.96);
+.bottom-nav-btn-center:active .center-btn-circle {
+  transform: scale(0.9);
+  box-shadow: 0 2px 6px var(--success-bg);
 }
 
-.btn-camera-action {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #ffffff;
-  border: none;
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+.center-btn-icon {
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
-.btn-manual-action {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border-light);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+.bottom-nav-btn-center .bottom-nav-label {
+  margin-top: 2px;
+  color: var(--success-light);
+  font-weight: 700;
 }
 
 /* Spinner e Preview da Etiqueta */

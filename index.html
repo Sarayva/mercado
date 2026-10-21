@@ -6,12 +6,24 @@
   <title>Meu Mercado - Compras & Preços</title>
 
   <!-- PWA Meta Tags & Cores de Tema -->
-  <meta name="theme-color" content="#090d16">
+  <meta name="theme-color" content="#202020">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mercado">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="description" content="App PWA para controle de compras no supermercado com total ao vivo e histórico de preços.">
+
+  <!-- Inicialização Imediata do Tema (Evita FOUC) -->
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('theme') || 'dark';
+        document.documentElement.className = t;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', t === 'light' ? '#f3f3f3' : '#202020');
+      } catch(e) {}
+    })();
+  </script>
 
   <!-- Favicon e Manifest -->
   <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
@@ -63,6 +75,10 @@
           </button>
 
           <div style="display: flex; align-items: center; gap: 6px;">
+            <button id="btn-theme-toggle" class="header-icon-action-btn" title="Alternar Modo Claro / Escuro" type="button">
+              <span id="theme-icon">🌙</span>
+            </button>
+
             <button id="btn-header-settings" class="header-icon-action-btn" title="Configurações e Chaves" type="button">
               <span>⚙️</span>
             </button>

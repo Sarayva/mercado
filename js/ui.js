@@ -1565,6 +1565,7 @@ export async function openSettingsModal() {
   const isDevSim = (await getConfig('devVisionSimulation')) === true;
   const syncQueue = (await getSyncQueue()) || [];
   const syncStatus = getSyncStatus();
+  const activeTheme = getCurrentTheme();
 
   modalContainer.innerHTML = `
     <div class="modal-overlay" id="sheet-overlay">
@@ -1579,6 +1580,23 @@ export async function openSettingsModal() {
         </div>
 
         <div style="overflow-y: auto; max-height: calc(90vh - 90px); padding-bottom: 24px;">
+          <!-- 0. APARÊNCIA & TEMA -->
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <span>🎨</span>
+              <span>Aparência & Tema</span>
+            </div>
+            <div class="settings-row" style="border-bottom: none;">
+              <div>
+                <div class="settings-label" id="settings-theme-status">${activeTheme === 'light' ? 'Modo Claro ☀️' : 'Modo Escuro 🌙'}</div>
+                <div class="settings-desc">Paleta Fluent UI inspirada no csv-precifica-analytics</div>
+              </div>
+              <button type="button" id="btn-settings-toggle-theme" class="btn-settings-action">
+                ${activeTheme === 'light' ? 'Mudar para Escuro 🌙' : 'Mudar para Claro ☀️'}
+              </button>
+            </div>
+          </div>
+
           <!-- 1. INTELIGÊNCIA ARTIFICIAL & CHAVE GEMINI -->
           <div class="settings-section">
             <div class="settings-section-title">
@@ -1721,6 +1739,13 @@ export async function openSettingsModal() {
   const btnClearTaken = document.getElementById('btn-clear-taken-settings');
   const btnOpenSync = document.getElementById('btn-open-sync-from-settings');
   const btnNuclearReset = document.getElementById('btn-nuclear-reset');
+  const btnSettingsTheme = document.getElementById('btn-settings-toggle-theme');
+
+  if (btnSettingsTheme) {
+    btnSettingsTheme.addEventListener('click', () => {
+      toggleTheme();
+    });
+  }
 
   btnClose.addEventListener('click', closeModal);
   overlay.addEventListener('click', (e) => {
@@ -3177,4 +3202,89 @@ export function renderUI() {
   renderHeader();
   renderModeSwitcher();
   renderListContent();
+}
+
+/**
+ * ==========================================================================
+ * GERENCIAMENTO DE TEMA (CLARO / ESCURO - FLUENT UI)
+ * Baseado no padrão de design tokens do csv-precifica-analytics
+ * ==========================================================================
+ */
+
+/**
+ * Obtém o tema persistido atualmente ('light' ou 'dark')
+ * @returns {string} 'light' | 'dark'
+ */
+export function getCurrentTheme() {
+  try {
+    return localStorage.getItem('theme') || 'dark';
+  } catch (e) {
+    return 'dark';
+  }
+}
+
+/**
+ * Aplica as classes CSS, meta tags PWA e atualiza ícones nos botões
+ * @param {'light'|'dark'} theme
+ * @returns {string} Tema aplicado
+ */
+export function applyTheme(theme) {
+  const current = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.classList.remove('light', 'dark');
+  document.documentElement.classList.add(current);
+
+  // Sincroniza meta theme-color para status bar nativa PWA (Android / iOS)
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+  if (metaThemeColor) {
+    metaThemeColor.setAttribute('content', current === 'light' ? '#f3f3f3' : '#202020');
+  }
+
+  // Atualiza ícone do botão do cabeçalho
+  const themeIcon = document.getElementById('theme-icon');
+  if (themeIcon) {
+    themeIcon.textContent = current === 'light' ? '☀️' : '🌙';
+  }
+  const themeBtn = document.getElementById('btn-theme-toggle');
+  if (themeBtn) {
+    themeBtn.title = current === 'light' ? 'Tema Atual: Claro (clique para alternar)' : 'Tema Atual: Escuro (clique para alternar)';
+  }
+
+  // Atualiza elementos do modal de configurações se estiver aberto
+  const themeStatusBadge = document.getElementById('settings-theme-status');
+  if (themeStatusBadge) {
+    themeStatusBadge.textContent = current === 'light' ? 'Modo Claro ☀️' : 'Modo Escuro 🌙';
+  }
+  const btnSettingsTheme = document.getElementById('btn-settings-toggle-theme');
+  if (btnSettingsTheme) {
+    btnSettingsTheme.textContent = current === 'light' ? 'Mudar para Escuro 🌙' : 'Mudar para Claro ☀️';
+  }
+
+  try {
+    localStorage.setItem('theme', current);
+  } catch (e) {
+    console.warn('[Theme] Falha ao persistir tema no localStorage:', e);
+  }
+
+  return current;
+}
+
+/**
+ * Alterna entre Modo Claro e Modo Escuro com vibração tátil e feedback toast
+ * @returns {string} Novo tema ativo
+ */
+export function toggleTheme() {
+  triggerHaptic();
+  const current = getCurrentTheme();
+  const next = current === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  showToast(next === 'light' ? '☀️ Modo Claro ativado' : '🌙 Modo Escuro ativado', 'info', 1600);
+  return next;
+}
+
+/**
+ * Inicializa o tema ativo no arranque da aplicação
+ */
+export function initTheme() {
+  const saved = getCurrentTheme();
+  applyTheme(saved);
 }

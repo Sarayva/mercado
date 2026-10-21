@@ -14,7 +14,9 @@ import {
   renderSyncBadge,
   openSyncModal,
   openPriceHistoryCatalogModal,
-  showToast
+  showToast,
+  initTheme,
+  toggleTheme
 } from './ui.js';
 import { initFirebase } from './firebase-config.js';
 import { initSync, onSyncStatusChange } from './sync.js';
@@ -43,6 +45,9 @@ function registerServiceWorker() {
 async function bootstrap() {
   console.log('[App] 1. Inicializando Meu Mercado PWA...');
   try {
+    // 0. Inicializa e sincroniza o tema da aplicação (Claro/Escuro)
+    initTheme();
+
     // 1. Inicializa o banco local IndexedDB
     console.log('[App] 2. Chamando initDB()...');
     await initDB();
@@ -144,6 +149,14 @@ async function bootstrap() {
  * Configura os ouvintes de clique globais
  */
 function setupEventListeners() {
+  // Botão de Alternância Rápida de Tema (Claro / Escuro) no Header
+  const btnTheme = document.getElementById('btn-theme-toggle');
+  if (btnTheme) {
+    btnTheme.addEventListener('click', () => {
+      toggleTheme();
+    });
+  }
+
   // Botão de Configurações no Header
   const btnSettings = document.getElementById('btn-header-settings');
   if (btnSettings) {

@@ -3,49 +3,112 @@
    Paleta escura moderna, tipografia fluida e safe-areas nativas
    ========================================================================== */
 
-:root {
-  /* Cores Principais - Esmeralda e Tons Profundos */
-  --primary: #0d9488;
-  --primary-dark: #0f766e;
-  --primary-light: #14b8a6;
-  --primary-glow: rgba(20, 184, 166, 0.25);
+:root, html.dark {
+  /* Paleta Fluent UI / CSV-Precifica-Analytics (Tema Escuro) */
+  --primary: #60cdff;
+  --primary-dark: #45b8e8;
+  --primary-light: #7ad7ff;
+  --primary-glow: rgba(96, 205, 255, 0.25);
   
-  --success: #10b981;
-  --success-dark: #059669;
-  --success-light: #34d399;
-  --success-bg: rgba(16, 185, 129, 0.15);
-  
-  --warning: #f59e0b;
-  --warning-bg: rgba(245, 158, 11, 0.15);
-  
-  --danger: #ef4444;
-  --danger-bg: rgba(239, 68, 68, 0.15);
+  --brand-gold: #fca311;
+  --brand-gold-hover: #e89200;
 
-  /* SuperfÃ­cies e Fundos */
-  --bg: #090d16;
-  --bg-card: #131b2e;
-  --bg-card-hover: #1a253f;
-  --bg-card-taken: #0e1524;
-  --bg-elevated: #1e293b;
-  --bg-input: #0b1120;
+  --success: #6ccb5f;
+  --success-dark: #4fa844;
+  --success-light: #8eef81;
+  --success-bg: rgba(108, 203, 95, 0.16);
+  
+  --warning: #fce100;
+  --warning-bg: rgba(252, 225, 0, 0.15);
+  
+  --danger: #ff99a4;
+  --danger-bg: rgba(255, 153, 164, 0.16);
+
+  /* Superfícies e Fundos */
+  --bg: #202020;
+  --bg-header: rgba(32, 32, 32, 0.94);
+  --bg-card: #2b2b2b;
+  --bg-card-hover: #323232;
+  --bg-card-taken: #242424;
+  --bg-elevated: #3a3a3a;
+  --bg-input: #1e1e1e;
   
   /* Textos */
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #ffffff;
+  --text-secondary: #d6d6d6;
+  --text-muted: #a0a0a0;
   
   /* Bordas */
-  --border: #1e293b;
-  --border-light: #334155;
-  --border-focus: #14b8a6;
+  --border: #3f3f3f;
+  --border-light: #505050;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focus: #60cdff;
 
-  /* Geometria e DimensÃµes */
+  /* Sombras */
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  /* Geometria e Dimensões */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-pill: 9999px;
 
-  /* Safe areas dinÃ¢micas */
+  /* Safe areas dinâmicas */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html.light {
+  /* Paleta Fluent UI / CSV-Precifica-Analytics (Tema Claro) */
+  --primary: #0067c0;
+  --primary-dark: #004f9e;
+  --primary-light: #005fb8;
+  --primary-glow: rgba(0, 103, 192, 0.18);
+
+  --brand-gold: #d97706;
+  --brand-gold-hover: #b45309;
+
+  --success: #107c10;
+  --success-dark: #0a540a;
+  --success-light: #15803d;
+  --success-bg: rgba(16, 124, 16, 0.12);
+
+  --warning: #9d5d00;
+  --warning-bg: rgba(157, 93, 0, 0.12);
+
+  --danger: #c42b1c;
+  --danger-bg: rgba(196, 43, 28, 0.12);
+
+  /* Superfícies e Fundos */
+  --bg: #f3f3f3;
+  --bg-header: rgba(243, 243, 243, 0.94);
+  --bg-card: #ffffff;
+  --bg-card-hover: #fafafa;
+  --bg-card-taken: #eaeaea;
+  --bg-elevated: #f0f0f0;
+  --bg-input: #ffffff;
+
+  /* Textos */
+  --text-primary: #1a1a1a;
+  --text-secondary: #5d5d5d;
+  --text-muted: #707070;
+
+  /* Bordas */
+  --border: #e5e5e5;
+  --border-light: #d4d4d4;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-focus: #0067c0;
+
+  /* Sombras */
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.06);
+
+  /* Geometria e Dimensões */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+
+  /* Safe areas dinâmicas */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -68,12 +131,13 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui, -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
   background-color: var(--bg);
   color: var(--text-primary);
   line-height: 1.4;
   user-select: none;
   -webkit-user-select: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Permitir seleÃ§Ã£o apenas onde Ã© essencial */
@@ -122,12 +186,13 @@ input, textarea {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(9, 13, 22, 0.96);
+  background: var(--bg-header);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
   padding: calc(var(--safe-top) + 8px) 14px 10px 14px;
   width: 100%;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .header-inner {
@@ -1605,7 +1670,7 @@ button,
   align-items: center;
   justify-content: space-between;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .settings-row:last-child {
@@ -1630,7 +1695,7 @@ button,
 }
 
 .btn-settings-action {
-  background: var(--surface);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--text-primary);
   padding: 8px 14px;
@@ -1656,6 +1721,17 @@ button,
 
 .btn-settings-danger:active {
   background: rgba(239, 68, 68, 0.25);
+}
+
+html.light .btn-settings-danger {
+  background: rgba(196, 43, 28, 0.12);
+  border-color: #c42b1c;
+  color: #c42b1c;
+}
+
+html.light .settings-danger-card {
+  border-color: rgba(196, 43, 28, 0.3);
+  background: rgba(196, 43, 28, 0.04);
 }
 
 
